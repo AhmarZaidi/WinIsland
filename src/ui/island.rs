@@ -28,7 +28,6 @@ use winisland_core::lyrics::LyricHighlight;
 use winisland_core::multitask::TaskFrame;
 use winisland_plugin_host::draw::replay::PreparedFrame;
 use winisland_plugin_host::host::PluginHost;
-use winisland_render::DrawingContext;
 use winisland_render::{BlurSpec, Image, Painter, Path, Point, RasterSurface, Rect, Rgba, Vec2};
 
 pub struct LayoutParams {
@@ -133,11 +132,7 @@ pub fn expanded_content_alpha(
     }
 }
 
-pub fn draw_island(
-    drawing_context: &mut DrawingContext<'_>,
-    painter: Painter<'_>,
-    params: DrawIslandParams<'_>,
-) -> bool {
+pub fn draw_island(painter: Painter<'_>, params: DrawIslandParams<'_>) -> bool {
     let layout = &params.layout;
     let rect = Rect::from_xywh(
         layout.island_x,
@@ -158,13 +153,7 @@ pub fn draw_island(
         host.runtime().extensions.begin_frame();
     }
     draw_expanded_shadow(painter, &params, island_path);
-    draw_background_layer(
-        painter,
-        drawing_context,
-        &params,
-        rect,
-        &params.surface.outline,
-    );
+    draw_background_layer(painter, &params, rect, &params.surface.outline);
     painter.save();
     painter.clip_path(island_path);
 
@@ -243,7 +232,7 @@ pub fn draw_island(
         params.secondary_task,
         layout.compact_scale,
     );
-    draw_pager(painter, drawing_context, &params, rect, expanded_alpha);
+    draw_pager(painter, &params, rect, expanded_alpha);
     if params.attention_alpha > 0.0 {
         let layout = &params.layout;
         let inset = -2.0 * layout.compact_scale;
@@ -350,14 +339,12 @@ fn draw_expanded_shadow(painter: Painter<'_>, params: &DrawIslandParams<'_>, isl
 
 fn draw_background_layer(
     painter: Painter<'_>,
-    drawing_context: &mut DrawingContext<'_>,
     params: &DrawIslandParams<'_>,
     rect: Rect,
     island_path: &Path,
 ) {
     draw_background(BackgroundParams {
         painter,
-        drawing_context,
         rect,
         island_path,
         island_style: params.style.island_style,
@@ -496,24 +483,13 @@ fn draw_compact_layer(
     }
 }
 
-fn draw_pager(
-    painter: Painter<'_>,
-    drawing_context: &mut DrawingContext<'_>,
-    params: &DrawIslandParams<'_>,
-    rect: Rect,
-    alpha: f32,
-) {
+fn draw_pager(painter: Painter<'_>, params: &DrawIslandParams<'_>, rect: Rect, alpha: f32) {
     let pages = params.style.pages;
     if alpha <= MIN_VISIBLE_OPACITY {
         return;
     }
     let backdrop = (params.style.island_style == "dynamic")
-        .then(|| {
-            crate::utils::backdrop::get_blurred_cover_background(
-                drawing_context,
-                params.media.media,
-            )
-        })
+        .then(|| crate::utils::backdrop::get_blurred_cover_background(params.media.media))
         .flatten();
     pager::draw(PagerParams {
         painter,

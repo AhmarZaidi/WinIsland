@@ -8,7 +8,6 @@ use crate::image::Image;
 use crate::painter::Painter;
 use crate::surface::NativeSurface;
 use crate::types::Mipmapped;
-use crate::types::{Sampling, TileMode};
 
 const MAIN_TARGET: RendererTargetId = RendererTargetId(0);
 
@@ -55,55 +54,6 @@ impl DrawingContext<'_> {
 
     fn finish_surface(&mut self, surface: &mut Surface) {
         self.direct_context.flush_surface(surface);
-    }
-
-    pub fn scale_image(&mut self, image: &Image, width: i32, height: i32) -> Option<Image> {
-        if width <= 0 || height <= 0 {
-            return None;
-        }
-        let info = ImageInfo::new_n32_premul((width, height), None);
-        let mut surface = self.render_surface(&info)?;
-        let mut paint = Paint::default();
-        paint.set_anti_alias(true);
-        surface.canvas().draw_image_rect_with_sampling_options(
-            image.as_skia(),
-            None,
-            Rect::from_xywh(0.0, 0.0, width as f32, height as f32),
-            crate::convert::to_skia_sampling(Sampling::LinearNone),
-            &paint,
-        );
-        self.finish_surface(&mut surface);
-        Some(Image::from_skia(surface.image_snapshot()))
-    }
-
-    pub fn blur_image(
-        &mut self,
-        image: &Image,
-        width: i32,
-        height: i32,
-        sigma: (f32, f32),
-        tile: Option<TileMode>,
-    ) -> Option<Image> {
-        if width <= 0 || height <= 0 {
-            return None;
-        }
-        let info = ImageInfo::new_n32_premul((width, height), None);
-        let mut surface = self.render_surface(&info)?;
-        let mut paint = Paint::default();
-        paint.set_anti_alias(true);
-        if let Some(filter) = image_filters::blur(
-            sigma,
-            tile.map(crate::convert::to_skia_tile_mode),
-            None,
-            None,
-        ) {
-            paint.set_image_filter(filter);
-        }
-        surface
-            .canvas()
-            .draw_image(image.as_skia(), (0, 0), Some(&paint));
-        self.finish_surface(&mut surface);
-        Some(Image::from_skia(surface.image_snapshot()))
     }
 }
 

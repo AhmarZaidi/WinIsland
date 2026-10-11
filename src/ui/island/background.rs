@@ -2,11 +2,8 @@ use winisland_render::{ImageOptions, Painter, Path, Rect, Rgba, Sampling, Vec2};
 
 use crate::core::smtc::MediaInfo;
 use crate::utils::backdrop::get_blurred_cover_background;
-use winisland_render::DrawingContext;
-
-pub(super) struct BackgroundParams<'a, 'context> {
+pub(super) struct BackgroundParams<'a> {
     pub(super) painter: Painter<'a>,
-    pub(super) drawing_context: &'a mut DrawingContext<'context>,
     pub(super) rect: Rect,
     pub(super) island_path: &'a Path,
     pub(super) island_style: &'a str,
@@ -26,10 +23,9 @@ fn draw_host_glass(painter: Painter<'_>, path: &Path) {
     draw_solid(painter, path, Rgba::from_argb(150, 10, 10, 14));
 }
 
-pub(super) fn draw_background(params: BackgroundParams<'_, '_>) {
+pub(super) fn draw_background(params: BackgroundParams<'_>) {
     let BackgroundParams {
         painter,
-        drawing_context,
         rect,
         island_path,
         island_style,
@@ -56,7 +52,7 @@ pub(super) fn draw_background(params: BackgroundParams<'_, '_>) {
             }
         }
         "dynamic" => {
-            if let Some(blurred_cover) = get_blurred_cover_background(drawing_context, media) {
+            if let Some(blurred_cover) = get_blurred_cover_background(media) {
                 draw_effect_base(painter, bounds);
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
