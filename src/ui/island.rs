@@ -17,7 +17,9 @@ use self::mini::{MiniContentParams, draw_mini_content};
 
 use crate::core::smtc::MediaInfo;
 use crate::ui::compact::CompactOverlay;
-use crate::ui::expanded::music_view::{default_media_palette, get_media_palette};
+use crate::ui::expanded::music_view::{
+    SpectrumFill, default_spectrum_fill, get_media_spectrum_fill,
+};
 use crate::ui::expanded::pager::{self, ExpandedPage, PagerParams};
 use winisland_core::config::{
     CompactWidgetSlot, LyricTransitionAnimation, PluginWidgetSlot, WidgetSlot,
@@ -189,10 +191,11 @@ pub fn draw_island(
         (1.0 - layout.expansion_progress * MINI_FADE_RATE).clamp(0.0, 1.0)
             * (1.0 - layout.hide_progress)
     };
-    let palette = if expanded_alpha > MIN_VISIBLE_OPACITY || mini_alpha > MIN_VISIBLE_OPACITY {
-        get_media_palette(params.media.media)
+    let spectrum_fill = if expanded_alpha > MIN_VISIBLE_OPACITY || mini_alpha > MIN_VISIBLE_OPACITY
+    {
+        get_media_spectrum_fill(params.media.media)
     } else {
-        default_media_palette()
+        default_spectrum_fill()
     };
     let visualizer_height_scale = COLLAPSED_VISUALIZER_HEIGHT_SCALE
         + (1.0 - COLLAPSED_VISUALIZER_HEIGHT_SCALE) * layout.expansion_progress;
@@ -200,7 +203,7 @@ pub fn draw_island(
         painter,
         blur_filter,
         &params,
-        &palette,
+        &spectrum_fill,
         expanded_alpha,
         visualizer_height_scale,
     );
@@ -215,7 +218,7 @@ pub fn draw_island(
         draw_compact_layer(
             painter,
             &params,
-            &palette,
+            &spectrum_fill,
             mini_alpha,
             visualizer_height_scale,
         );
@@ -367,7 +370,7 @@ fn draw_expanded_layer(
     painter: Painter<'_>,
     blur_filter: Option<BlurSpec>,
     params: &DrawIslandParams<'_>,
-    palette: &[Rgba],
+    spectrum_fill: &SpectrumFill,
     alpha: f32,
     visualizer_height_scale: f32,
 ) -> bool {
@@ -399,7 +402,7 @@ fn draw_expanded_layer(
         expanded_height: style.expanded_height,
         text_color: Rgba::WHITE,
         text_color_sec: Rgba::WHITE,
-        palette,
+        spectrum_fill,
         widget_layout: style.widget_layout,
         plugin_widget_layout: style.plugin_widget_layout,
         plugin_widgets: style.plugin_widgets,
@@ -411,7 +414,7 @@ fn draw_expanded_layer(
 fn draw_compact_layer(
     painter: Painter<'_>,
     params: &DrawIslandParams<'_>,
-    palette: &[Rgba],
+    spectrum_fill: &SpectrumFill,
     alpha: f32,
     visualizer_height_scale: f32,
 ) {
@@ -448,7 +451,7 @@ fn draw_compact_layer(
         offset_x: layout.island_x + left_extension,
         stable_offset_y: layout.stable_island_y,
         base_h: layout.base_h,
-        palette,
+        spectrum_fill,
         viz_h_scale: visualizer_height_scale,
         current_lyric: lyrics.current_lyric,
         current_secondary_lyric: lyrics.current_secondary_lyric,

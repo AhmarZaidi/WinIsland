@@ -1,6 +1,6 @@
 use crate::core::smtc::MediaInfo;
 use crate::ui::expanded::music_view::{
-    DrawVisualizerParams, draw_text_cached, draw_visualizer, get_cached_media_image,
+    DrawVisualizerParams, SpectrumFill, draw_text_cached, draw_visualizer, get_cached_media_image,
 };
 use std::collections::HashMap;
 use winisland_core::config::LyricTransitionAnimation;
@@ -76,7 +76,7 @@ pub(super) struct MiniContentParams<'a> {
     pub(super) offset_x: f32,
     pub(super) stable_offset_y: f32,
     pub(super) base_h: f32,
-    pub(super) palette: &'a [Rgba],
+    pub(super) spectrum_fill: &'a SpectrumFill,
     pub(super) viz_h_scale: f32,
     pub(super) current_lyric: &'a str,
     pub(super) current_secondary_lyric: &'a str,
@@ -154,7 +154,7 @@ fn draw_music_content(params: &MiniContentParams<'_>, alpha: u8) {
         y: params.stable_offset_y + params.base_h / 2.0,
         alpha,
         is_playing: params.media.is_playing,
-        palette: params.palette,
+        fill: params.spectrum_fill,
         spectrum: &params.media.spectrum,
         w_scale: MINI_VISUALIZER_WIDTH_SCALE * params.global_scale,
         h_scale: params.viz_h_scale * params.global_scale,

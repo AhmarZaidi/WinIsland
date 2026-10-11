@@ -1,5 +1,5 @@
 use crate::core::smtc::MediaInfo;
-use crate::ui::expanded::music_view::{DrawMusicPageParams, draw_music_page};
+use crate::ui::expanded::music_view::{DrawMusicPageParams, SpectrumFill, draw_music_page};
 use crate::ui::expanded::pager::ExpandedPage;
 use crate::ui::expanded::widget_view::draw_widget_page;
 use std::collections::HashMap;
@@ -33,7 +33,7 @@ pub(super) struct ExpandedContentParams<'a> {
     pub(super) expanded_height: f32,
     pub(super) text_color: Rgba,
     pub(super) text_color_sec: Rgba,
-    pub(super) palette: &'a [Rgba],
+    pub(super) spectrum_fill: &'a SpectrumFill,
     pub(super) widget_layout: &'a [WidgetSlot],
     pub(super) plugin_widget_layout: &'a [PluginWidgetSlot],
     pub(super) plugin_widgets: &'a winisland_core::widgets::WidgetManager,
@@ -67,7 +67,7 @@ pub(super) fn draw_expanded_content(params: ExpandedContentParams<'_>) -> bool {
         expanded_height,
         text_color,
         text_color_sec,
-        palette,
+        spectrum_fill,
         widget_layout,
         plugin_widget_layout,
         plugin_widgets,
@@ -128,7 +128,7 @@ pub(super) fn draw_expanded_content(params: ExpandedContentParams<'_>) -> bool {
                     dt,
                     text_color,
                     text_color_sec,
-                    palette,
+                    spectrum_fill,
                 }),
                 ExpandedPage::Widgets => {
                     widget_animating |= draw_widget_page(
