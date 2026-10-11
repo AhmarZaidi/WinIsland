@@ -1,5 +1,15 @@
 # Changelog
 
+### v1.4.2
+- Fixed resource widget GPU usage so it matches Task Manager
+- Added separate usage for each GPU (GPU 0, GPU 1, and so on) on systems with more than one GPU
+- Changed the network metric to show upload and download rates
+- Redesigned the resource usage editor with a live preview, color picker, drag-to-reorder, and Restore Defaults
+- Allowed hiding the Widgets page, and fixed the page order hint overflowing its border
+- Changed spectrum bars to a gradient built from the album cover's colors
+- Fixed the song cover background sometimes showing streaks instead of a blur
+- Added a privacy policy
+
 ### v1.4.1
 - Added a timer with compact countdown, pause/resume controls, and completion alerts
 - Added a prompt to open copied web links
