@@ -8,10 +8,10 @@ pub use controls::{
     get_progress_bar_rect, set_progress_dragging, set_progress_hover, snap_progress,
     trigger_cover_flip, trigger_next_click, trigger_pause_click, trigger_prev_click,
 };
-pub use visualizer::{DrawVisualizerParams, draw_visualizer};
+pub use visualizer::{DrawVisualizerParams, SpectrumFill, draw_visualizer};
 
 use self::controls::ease_out_back;
-use self::palette::get_palette_from_image;
+use self::palette::get_spectrum_image;
 use crate::core::smtc::MediaInfo;
 use crate::icons::controls::{draw_control_triangle, draw_pause_button, draw_play_button};
 use crate::utils::cover::decode_cover_image;
@@ -161,19 +161,25 @@ pub fn get_cached_media_image_with_key(media: &MediaInfo) -> Option<(Image, u64)
     result
 }
 
-pub fn get_media_palette(media: &MediaInfo) -> Arc<[Rgba]> {
-    if let Some((img, cache_key)) = get_cached_media_image_with_key(media) {
-        get_palette_from_image(&img, cache_key)
-    } else {
-        default_media_palette()
-    }
+pub fn get_media_spectrum_fill(media: &MediaInfo) -> SpectrumFill {
+    get_cached_media_image_with_key(media)
+        .and_then(|(img, cache_key)| get_spectrum_image(&img, cache_key))
+        .map_or_else(default_spectrum_fill, SpectrumFill::Cover)
 }
 
-pub fn default_media_palette() -> Arc<[Rgba]> {
-    static DEFAULT_PALETTE: OnceLock<Arc<[Rgba]>> = OnceLock::new();
-    DEFAULT_PALETTE
-        .get_or_init(|| Arc::from([Rgba::from_rgb(180, 180, 180), Rgba::from_rgb(100, 100, 100)]))
-        .clone()
+pub fn default_spectrum_fill() -> SpectrumFill {
+    static DEFAULT_COLORS: OnceLock<Arc<[Rgba]>> = OnceLock::new();
+    SpectrumFill::Colors(
+        DEFAULT_COLORS
+            .get_or_init(|| {
+                Arc::from([
+                    Rgba::from_rgb(176, 176, 184),
+                    Rgba::from_rgb(206, 206, 212),
+                    Rgba::from_rgb(236, 236, 240),
+                ])
+            })
+            .clone(),
+    )
 }
 
 pub fn clear_cover_cache() {
@@ -204,7 +210,7 @@ pub struct DrawMusicPageParams<'a> {
     pub dt: f32,
     pub text_color: Rgba,
     pub text_color_sec: Rgba,
-    pub palette: &'a [Rgba],
+    pub spectrum_fill: &'a SpectrumFill,
 }
 
 pub fn draw_music_page(params: DrawMusicPageParams<'_>) {
@@ -227,7 +233,7 @@ pub fn draw_music_page(params: DrawMusicPageParams<'_>) {
         dt,
         text_color,
         text_color_sec,
-        palette,
+        spectrum_fill,
     } = params;
 
     let base_img_size = COVER_SIZE * scale;
@@ -507,7 +513,7 @@ pub fn draw_music_page(params: DrawMusicPageParams<'_>) {
         y: title_y - VISUALIZER_TITLE_OFFSET * scale,
         alpha,
         is_playing: music_active && media.is_playing,
-        palette,
+        fill: spectrum_fill,
         spectrum: &media.spectrum,
         w_scale: scale,
         h_scale: viz_h_scale,
