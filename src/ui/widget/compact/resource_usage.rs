@@ -157,12 +157,14 @@ fn draw_ring(
     let label_size = (6.0 * scale).max(4.5);
     let label_w = fonts.measure_text_cached(label, label_size, FontStyle::bold());
     let label_gap = RING_LABEL_GAP * scale;
-    let diameter = (rect.height() * 0.72)
+    let outer_diameter = (rect.height() * 0.72)
         .min(rect.width() - label_w - label_gap)
         .max(10.0 * scale);
-    let group_left = rect.center_x() - (label_w + label_gap + diameter) / 2.0;
+    let stroke_width = (2.0 * scale).min(outer_diameter * 0.13);
+    let diameter = outer_diameter - stroke_width;
+    let group_left = rect.center_x() - (label_w + label_gap + outer_diameter) / 2.0;
     let center = Point::new(
-        group_left + label_w + label_gap + diameter / 2.0,
+        group_left + label_w + label_gap + outer_diameter / 2.0,
         rect.center_y(),
     );
     let ring = Rect::from_xywh(
@@ -171,7 +173,6 @@ fn draw_ring(
         diameter,
         diameter,
     );
-    let stroke_width = (2.0 * scale).min(diameter * 0.13);
     painter.stroke_circle(
         center,
         diameter / 2.0,
