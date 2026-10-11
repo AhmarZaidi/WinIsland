@@ -1,10 +1,14 @@
 use std::cell::RefCell;
 
-use winisland_render::{Image, TileMode};
+use winisland_render::{
+    BlurSpec, Image, ImageOptions, LayerSpec, RasterSurface, Rect, Rgba, Sampling, TileMode,
+};
 
 use crate::core::smtc::MediaInfo;
 use crate::ui::expanded::music_view::get_cached_media_image_with_key;
-use winisland_render::DrawingContext;
+
+const BLURRED_COVER_SIZE: i32 = 64;
+const BLURRED_COVER_SIGMA: f32 = 8.0;
 
 thread_local! {
     static BLURRED_COVER_CACHE: RefCell<Option<BlurredCoverCache>> = const { RefCell::new(None) };
@@ -15,10 +19,7 @@ struct BlurredCoverCache {
     blurred_image: Image,
 }
 
-pub fn get_blurred_cover_background(
-    drawing_context: &mut DrawingContext<'_>,
-    media: &MediaInfo,
-) -> Option<Image> {
+pub fn get_blurred_cover_background(media: &MediaInfo) -> Option<Image> {
     if media.title.is_empty() {
         return None;
     }
@@ -35,9 +36,7 @@ pub fn get_blurred_cover_background(
         return cached;
     }
 
-    let downscaled = drawing_context.scale_image(&image, 64, 64)?;
-    let blurred_image =
-        drawing_context.blur_image(&downscaled, 64, 64, (8.0, 8.0), Some(TileMode::Clamp))?;
+    let blurred_image = blur_cover(&image)?;
 
     BLURRED_COVER_CACHE.with(|cell| {
         *cell.borrow_mut() = Some(BlurredCoverCache {
@@ -47,6 +46,28 @@ pub fn get_blurred_cover_background(
     });
 
     Some(blurred_image)
+}
+
+fn blur_cover(image: &Image) -> Option<Image> {
+    let mut surface = RasterSurface::new(BLURRED_COVER_SIZE, BLURRED_COVER_SIZE)?;
+    surface.clear(Rgba::TRANSPARENT);
+    let painter = surface.painter();
+    painter.begin_layer(LayerSpec::Blur(BlurSpec {
+        sigma: (BLURRED_COVER_SIGMA, BLURRED_COVER_SIGMA),
+        tile: Some(TileMode::Clamp),
+    }));
+    painter.draw_image(
+        image,
+        Rect::from_xywh(
+            0.0,
+            0.0,
+            BLURRED_COVER_SIZE as f32,
+            BLURRED_COVER_SIZE as f32,
+        ),
+        &ImageOptions::default().with_sampling(Sampling::LinearNone),
+    );
+    painter.end_layer();
+    Some(surface.snapshot())
 }
 
 pub fn clear_blurred_cover_cache() {
