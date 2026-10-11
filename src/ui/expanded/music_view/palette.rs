@@ -4,15 +4,17 @@ use std::collections::HashMap;
 use winisland_render::{Image, Rgba};
 
 const SAMPLE_SIZE: i32 = 24;
-const GRID: usize = 3;
+const GRID_COLUMNS: usize = 2;
+const GRID_ROWS: usize = 3;
 const SPECTRUM_IMAGE_SIZE: i32 = 16;
 const HUE_BINS: usize = 12;
 const NEUTRAL_BINS: usize = 3;
 const NEUTRAL_CHROMA: f32 = 0.04;
-const VIBRANCE_CHROMA: f32 = 0.04;
-const MIN_LIGHTNESS: f32 = 0.68;
-const MAX_CHROMA: f32 = 0.24;
-const SHADOW_FLOOR: f32 = 0.08;
+const VIBRANCE_CHROMA: f32 = 0.02;
+const MIN_LIGHTNESS: f32 = 0.5;
+const MIN_CONTRAST: f32 = 3.0;
+const BACKDROP_DIM: f32 = 120.0 / 255.0;
+const BACKDROP_SHADE: f32 = 20.0;
 const CACHE_LIMIT: usize = 50;
 
 thread_local! {
@@ -42,24 +44,28 @@ fn spectrum_image(image: &Image) -> Option<Image> {
     }
     let sample = SAMPLE_SIZE as usize;
     let pixels = image.sample_bgra8(SAMPLE_SIZE, SAMPLE_SIZE)?;
-    let colors: Vec<Lab> = pixels
+    let rgb: Vec<[f32; 3]> = pixels
         .as_chunks::<4>()
         .0
         .iter()
         .map(|pixel| {
             let alpha = (f32::from(pixel[3]) / 255.0).max(f32::EPSILON);
-            let [red, green, blue] = [pixel[2], pixel[1], pixel[0]]
-                .map(|channel| (f32::from(channel) / alpha).min(255.0));
-            oklab(red, green, blue)
+            [pixel[2], pixel[1], pixel[0]].map(|channel| (f32::from(channel) / alpha).min(255.0))
         })
         .collect();
-    let cell = sample / GRID;
-    let blocks: Vec<Lab> = (0..GRID * GRID)
+    let colors: Vec<Lab> = rgb
+        .iter()
+        .map(|&[red, green, blue]| oklab(red, green, blue))
+        .collect();
+    let floor = lightness_floor(&rgb);
+    let (cell_width, cell_height) = (sample / GRID_COLUMNS, sample / GRID_ROWS);
+    let blocks: Vec<Lab> = (0..GRID_COLUMNS * GRID_ROWS)
         .map(|index| {
-            let (column, row) = (index % GRID, index / GRID);
-            let block = (row * cell..(row + 1) * cell)
-                .flat_map(|y| (column * cell..(column + 1) * cell).map(move |x| y * sample + x));
-            lift(dominant_color(block.map(|pixel| colors[pixel])))
+            let (column, row) = (index % GRID_COLUMNS, index / GRID_COLUMNS);
+            let block = (row * cell_height..(row + 1) * cell_height).flat_map(|y| {
+                (column * cell_width..(column + 1) * cell_width).map(move |x| y * sample + x)
+            });
+            lift(dominant_color(block.map(|pixel| colors[pixel])), floor)
         })
         .collect();
     let size = SPECTRUM_IMAGE_SIZE as usize;
@@ -103,21 +109,30 @@ fn dominant_color(pixels: impl Iterator<Item = Lab>) -> Lab {
     }
 }
 
-fn lift(color: Lab) -> Lab {
-    let color = color.lch();
-    let lightness = color.l.clamp(MIN_LIGHTNESS, 1.0);
-    Lch {
-        l: lightness,
-        c: (color.c * lightness / color.l.max(SHADOW_FLOOR)).min(MAX_CHROMA),
-        h: color.h,
+fn lightness_floor(rgb: &[[f32; 3]]) -> f32 {
+    let count = rgb.len().max(1) as f32;
+    let sum = rgb.iter().fold([0.0f32; 3], |sum, pixel| {
+        [sum[0] + pixel[0], sum[1] + pixel[1], sum[2] + pixel[2]]
+    });
+    let [red, green, blue] =
+        sum.map(|channel| channel / count * (1.0 - BACKDROP_DIM) + BACKDROP_SHADE * BACKDROP_DIM);
+    let backdrop = oklab(red, green, blue).l.powi(3);
+    (MIN_CONTRAST * (backdrop + 0.05) - 0.05)
+        .cbrt()
+        .max(MIN_LIGHTNESS)
+}
+
+fn lift(color: Lab, floor: f32) -> Lab {
+    Lab {
+        l: color.l.max(floor),
+        ..color
     }
-    .lab()
 }
 
 fn mesh_color(blocks: &[Lab], x: f32, y: f32) -> Lab {
-    let axis = |value: f32| {
-        let position = (value * GRID as f32 - 0.5).clamp(0.0, (GRID - 1) as f32);
-        let index = (position as usize).min(GRID - 2);
+    let axis = |value: f32, count: usize| {
+        let position = (value * count as f32 - 0.5).clamp(0.0, (count - 1) as f32);
+        let index = (position as usize).min(count - 2);
         let fraction = position - index as f32;
         (index, fraction * fraction * (3.0 - 2.0 * fraction))
     };
@@ -126,8 +141,8 @@ fn mesh_color(blocks: &[Lab], x: f32, y: f32) -> Lab {
         a: from.a + (to.a - from.a) * amount,
         b: from.b + (to.b - from.b) * amount,
     };
-    let ((column, horizontal), (row, vertical)) = (axis(x), axis(y));
-    let block = |column: usize, row: usize| blocks[row * GRID + column];
+    let ((column, horizontal), (row, vertical)) = (axis(x, GRID_COLUMNS), axis(y, GRID_ROWS));
+    let block = |column: usize, row: usize| blocks[row * GRID_COLUMNS + column];
     mix(
         mix(block(column, row), block(column + 1, row), horizontal),
         mix(
