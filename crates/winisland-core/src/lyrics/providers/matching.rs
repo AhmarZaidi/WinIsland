@@ -1,6 +1,5 @@
 use std::cmp::Reverse;
 
-use fuzzengine::{PreprocessingOptions, ratio, token_sort_ratio};
 use serde_json::Value;
 
 use crate::lyrics::{MatchKey, normalize_match_text, simplify_chinese};
@@ -65,10 +64,6 @@ impl SongQuery {
         if !self.accepts_edition(title) {
             return None;
         }
-        let options = PreprocessingOptions {
-            force_ascii: false,
-            strip: true,
-        };
         let title_score = if self.title.compact == candidate.compact {
             300
         } else if !self.title.simplified_compact.is_empty()
@@ -76,7 +71,7 @@ impl SongQuery {
         {
             280
         } else if self.title.normalized.split_whitespace().count() >= 2
-            && token_sort_ratio(&self.title.normalized, &candidate.normalized, &options) >= 0.999
+            && token_sort_ratio(&self.title.normalized, &candidate.normalized) >= 0.999
         {
             260
         } else if self
@@ -86,7 +81,7 @@ impl SongQuery {
             .count()
             .min(candidate.compact.chars().count())
             >= 8
-            && ratio(&self.title.compact, &candidate.compact, &options) >= 0.94
+            && ratio(&self.title.compact, &candidate.compact) >= 0.94
         {
             220
         } else {
@@ -170,6 +165,39 @@ pub(super) fn artist_matches(expected: &str, candidate: &str) -> bool {
             && candidate_parts
                 .iter()
                 .all(|part| expected_parts.contains(part)))
+}
+
+fn ratio(left: &str, right: &str) -> f64 {
+    let left: Vec<char> = left.trim().chars().collect();
+    let right: Vec<char> = right.trim().chars().collect();
+    let total = left.len() + right.len();
+    if total == 0 {
+        return 1.0;
+    }
+    let mut row: Vec<usize> = (0..=right.len()).collect();
+    for (index, left_char) in left.iter().enumerate() {
+        let mut diagonal = row[0];
+        row[0] = index + 1;
+        for (column, right_char) in right.iter().enumerate() {
+            let above = row[column + 1];
+            row[column + 1] = if left_char == right_char {
+                diagonal
+            } else {
+                1 + diagonal.min(above).min(row[column])
+            };
+            diagonal = above;
+        }
+    }
+    1.0 - row[right.len()] as f64 / total as f64
+}
+
+fn token_sort_ratio(left: &str, right: &str) -> f64 {
+    let sorted = |value: &str| {
+        let mut tokens: Vec<_> = value.split(' ').collect();
+        tokens.sort_unstable();
+        tokens.join(" ")
+    };
+    ratio(&sorted(left), &sorted(right))
 }
 
 fn edition_flags(title: &str) -> u16 {
