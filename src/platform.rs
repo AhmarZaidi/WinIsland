@@ -180,12 +180,17 @@ pub(crate) fn tray_theme(is_light: bool) -> TrayTheme {
     }
 }
 
-pub(crate) fn tray_labels(visible: bool) -> TrayLabels {
+pub(crate) fn tray_labels(visible: bool, recording: bool) -> TrayLabels {
     use winisland_core::i18n::tr;
     TrayLabels {
         toggle: tr(if visible { "tray_hide" } else { "tray_show" }),
         settings: tr("tray_settings"),
         guide: tr("tray_guide"),
+        record: tr(if recording {
+            "tray_record_stop"
+        } else {
+            "tray_record_start"
+        }),
         restart: tr("tray_restart"),
         exit: tr("tray_exit"),
         tooltip: winisland_core::config::WINDOW_TITLE.to_string(),

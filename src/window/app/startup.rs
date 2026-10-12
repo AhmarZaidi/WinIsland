@@ -109,7 +109,7 @@ impl App {
             }
             match crate::platform::shell().tray_install(
                 crate::platform::tray_theme(is_light),
-                crate::platform::tray_labels(true),
+                crate::platform::tray_labels(true, false),
             ) {
                 Ok(()) => {
                     self.tray_installed = true;

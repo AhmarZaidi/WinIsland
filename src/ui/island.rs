@@ -27,7 +27,10 @@ use winisland_core::multitask::TaskFrame;
 use winisland_plugin_host::draw::replay::PreparedFrame;
 use winisland_plugin_host::host::PluginHost;
 use winisland_render::DrawingContext;
-use winisland_render::{BlurSpec, Image, Painter, Path, Point, RasterSurface, Rect, Rgba, Vec2};
+use winisland_render::{
+    Backdrop, BlurSpec, Image, LiquidMaterial, LiquidShape, Painter, Path, Point, RasterSurface,
+    Rect, Rgba, Vec2,
+};
 
 pub struct LayoutParams {
     pub pager_above: bool,
@@ -68,9 +71,27 @@ pub struct LyricsParams<'a> {
     pub lyric_side_gap: f32,
 }
 
+/// User adjustments applied on top of the liquid glass materials.
+#[derive(Clone, Copy)]
+pub struct LiquidOptics {
+    pub refraction: f32,
+    pub dispersion: f32,
+    pub tint: f32,
+}
+
+impl LiquidOptics {
+    pub(crate) fn apply(self, material: LiquidMaterial) -> LiquidMaterial {
+        material
+            .with_optics(self.refraction, self.dispersion)
+            .with_tint(self.tint)
+    }
+}
+
 pub struct StyleParams<'a> {
     pub island_style: &'a str,
     pub host_backdrop: bool,
+    pub liquid_optics: LiquidOptics,
+    pub liquid_siri: bool,
     pub use_blur: bool,
     pub font_size: f32,
     pub music_text_y_offset: f32,
@@ -95,6 +116,8 @@ const MINI_FADE_RATE: f32 = 1.5;
 const COLLAPSED_VISUALIZER_HEIGHT_SCALE: f32 = 0.45;
 const BORDER_WIDTH: f32 = 1.0;
 const SOLID_STYLE: &str = "default";
+const LIQUID_STYLE: &str = "liquid";
+const LIQUID_FUSION: f32 = 6.0;
 const SOLID_BORDER_ALPHA: u8 = 30;
 const EFFECT_BORDER_ALPHA: u8 = 40;
 
@@ -155,84 +178,30 @@ pub fn draw_island(
     if let Some(host) = params.style.plugin_host {
         host.runtime().extensions.begin_frame();
     }
-    draw_expanded_shadow(painter, &params, island_path);
-    draw_background_layer(
-        painter,
-        drawing_context,
-        &params,
-        rect,
-        &params.surface.outline,
-    );
-    painter.save();
-    painter.clip_path(island_path);
-
-    if let Some(host) = params.style.plugin_host {
-        crate::ui::plugin::draw_layer(
+    let liquid = (params.style.island_style == LIQUID_STYLE)
+        .then(|| drawing_context.backdrop())
+        .flatten();
+    let (widget_animating, expanded_alpha) = match liquid {
+        Some(backdrop) => draw_liquid_island(
             painter,
-            host,
-            params.style.plugin_frames,
-            winisland_plugin_api::SURFACE_BACKGROUND,
-            rect,
-            layout.compact_scale,
-            ((1.0 - layout.hide_progress) * 255.0) as u8,
-        );
-    }
-    let compact_overlay_visible = params.compact_overlay.is_visible();
-    let expanded_alpha = expanded_content_alpha(
-        layout.expansion_progress,
-        layout.hide_progress,
-        compact_overlay_visible,
-    );
-    let mini_alpha = if compact_overlay_visible {
-        0.0
-    } else {
-        (1.0 - layout.expansion_progress * MINI_FADE_RATE).clamp(0.0, 1.0)
-            * (1.0 - layout.hide_progress)
-    };
-    let palette = if expanded_alpha > MIN_VISIBLE_OPACITY || mini_alpha > MIN_VISIBLE_OPACITY {
-        get_media_palette(params.media.media)
-    } else {
-        default_media_palette()
-    };
-    let visualizer_height_scale = COLLAPSED_VISUALIZER_HEIGHT_SCALE
-        + (1.0 - COLLAPSED_VISUALIZER_HEIGHT_SCALE) * layout.expansion_progress;
-    let widget_animating = draw_expanded_layer(
-        painter,
-        blur_filter,
-        &params,
-        &palette,
-        expanded_alpha,
-        visualizer_height_scale,
-    );
-    if compact_overlay_visible {
-        params.compact_overlay.draw(
-            painter,
-            rect,
-            layout.compact_scale,
-            1.0 - layout.hide_progress,
-        );
-    } else {
-        draw_compact_layer(
-            painter,
+            drawing_context,
             &params,
-            &palette,
-            mini_alpha,
-            visualizer_height_scale,
-        );
-    }
-    if let Some(host) = params.style.plugin_host {
-        crate::ui::plugin::draw_layer(
-            painter,
-            host,
-            params.style.plugin_frames,
-            winisland_plugin_api::SURFACE_FOREGROUND,
             rect,
-            layout.compact_scale,
-            ((1.0 - layout.hide_progress) * 255.0) as u8,
-        );
-        host.runtime().extensions.finish_frame();
-    }
-    painter.restore();
+            blur_filter,
+            &backdrop,
+        ),
+        None => {
+            draw_expanded_shadow(painter, &params, island_path);
+            draw_background_layer(
+                painter,
+                drawing_context,
+                &params,
+                rect,
+                &params.surface.outline,
+            );
+            draw_island_content(painter, &params, rect, blur_filter)
+        }
+    };
     draw_island_border(painter, &params);
     multitask::draw_content(
         painter,
@@ -512,6 +481,9 @@ fn draw_pager(
             )
         })
         .flatten();
+    let liquid = (params.style.island_style == LIQUID_STYLE)
+        .then(|| drawing_context.backdrop())
+        .flatten();
     pager::draw(PagerParams {
         painter,
         island: rect,
@@ -524,10 +496,16 @@ fn draw_pager(
         close_hover: params.layout.pager_close_hover,
         host_blur: params.style.host_backdrop,
         backdrop: backdrop.as_ref(),
+        liquid: liquid
+            .as_ref()
+            .map(|backdrop| (backdrop, params.style.liquid_optics)),
     });
 }
 
 fn draw_island_border(painter: Painter<'_>, params: &DrawIslandParams<'_>) {
+    if params.style.island_style == LIQUID_STYLE {
+        return;
+    }
     let layout = &params.layout;
     let alpha = if params.style.island_style == SOLID_STYLE {
         SOLID_BORDER_ALPHA
@@ -549,4 +527,121 @@ fn draw_island_border(painter: Painter<'_>, params: &DrawIslandParams<'_>) {
         winisland_render::StrokeJoin::Miter,
     );
     painter.restore();
+}
+
+fn draw_liquid_island(
+    painter: Painter<'_>,
+    drawing_context: &mut DrawingContext<'_>,
+    params: &DrawIslandParams<'_>,
+    rect: Rect,
+    blur_filter: Option<BlurSpec>,
+    backdrop: &Backdrop,
+) -> (bool, f32) {
+    let layout = &params.layout;
+    let expansion = layout.expansion_progress.clamp(0.0, 1.0);
+    let scale = layout.compact_scale + (layout.expanded_scale - layout.compact_scale) * expansion;
+    let shape = LiquidShape {
+        rect,
+        radius: layout.current_r,
+        secondary: params.surface.secondary,
+        smoothing: LIQUID_FUSION * layout.compact_scale,
+    };
+    let mut material = params
+        .style
+        .liquid_optics
+        .apply(LiquidMaterial::island(scale));
+    if params.style.liquid_siri {
+        material.black_fade = 1.0;
+    }
+    if !painter.draw_liquid_glass(backdrop, &shape, &material, 1.0, 1.0) {
+        draw_background_layer(
+            painter,
+            drawing_context,
+            params,
+            rect,
+            &params.surface.outline,
+        );
+    }
+    draw_island_content(painter, params, rect, blur_filter)
+}
+
+fn draw_island_content(
+    painter: Painter<'_>,
+    params: &DrawIslandParams<'_>,
+    rect: Rect,
+    blur_filter: Option<BlurSpec>,
+) -> (bool, f32) {
+    let layout = &params.layout;
+    let island_path = &params.surface.primary;
+    painter.save();
+    painter.clip_path(island_path);
+
+    if let Some(host) = params.style.plugin_host {
+        crate::ui::plugin::draw_layer(
+            painter,
+            host,
+            params.style.plugin_frames,
+            winisland_plugin_api::SURFACE_BACKGROUND,
+            rect,
+            layout.compact_scale,
+            ((1.0 - layout.hide_progress) * 255.0) as u8,
+        );
+    }
+    let compact_overlay_visible = params.compact_overlay.is_visible();
+    let expanded_alpha = expanded_content_alpha(
+        layout.expansion_progress,
+        layout.hide_progress,
+        compact_overlay_visible,
+    );
+    let mini_alpha = if compact_overlay_visible {
+        0.0
+    } else {
+        (1.0 - layout.expansion_progress * MINI_FADE_RATE).clamp(0.0, 1.0)
+            * (1.0 - layout.hide_progress)
+    };
+    let palette = if expanded_alpha > MIN_VISIBLE_OPACITY || mini_alpha > MIN_VISIBLE_OPACITY {
+        get_media_palette(params.media.media)
+    } else {
+        default_media_palette()
+    };
+    let visualizer_height_scale = COLLAPSED_VISUALIZER_HEIGHT_SCALE
+        + (1.0 - COLLAPSED_VISUALIZER_HEIGHT_SCALE) * layout.expansion_progress;
+    let widget_animating = draw_expanded_layer(
+        painter,
+        blur_filter,
+        params,
+        &palette,
+        expanded_alpha,
+        visualizer_height_scale,
+    );
+    if compact_overlay_visible {
+        params.compact_overlay.draw(
+            painter,
+            rect,
+            layout.compact_scale,
+            1.0 - layout.hide_progress,
+        );
+    } else {
+        draw_compact_layer(
+            painter,
+            params,
+            &palette,
+            mini_alpha,
+            visualizer_height_scale,
+        );
+    }
+    if let Some(host) = params.style.plugin_host {
+        crate::ui::plugin::draw_layer(
+            painter,
+            host,
+            params.style.plugin_frames,
+            winisland_plugin_api::SURFACE_FOREGROUND,
+            rect,
+            layout.compact_scale,
+            ((1.0 - layout.hide_progress) * 255.0) as u8,
+        );
+        host.runtime().extensions.finish_frame();
+    }
+    painter.restore();
+    (widget_animating, expanded_alpha)
 }

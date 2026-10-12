@@ -1,7 +1,7 @@
 use winisland_core::config::ExpandedPageKind;
 use winisland_render::{
-    BlurSpec, Image, ImageFit, ImageOptions, Painter, Path, Point, Radius, Rect, Rgba, Sampling,
-    StrokeCap, Vec2,
+    Backdrop, BlurSpec, Image, ImageFit, ImageOptions, LiquidMaterial, LiquidShape, Painter, Path,
+    Point, Radius, Rect, Rgba, Sampling, StrokeCap, Vec2,
 };
 
 const GAP: f32 = 8.0;
@@ -197,6 +197,7 @@ pub struct PagerParams<'a> {
     pub close_hover: f32,
     pub host_blur: bool,
     pub backdrop: Option<&'a Image>,
+    pub liquid: Option<(&'a Backdrop, crate::ui::island::LiquidOptics)>,
 }
 
 pub fn draw(params: PagerParams<'_>) {
@@ -212,6 +213,7 @@ pub fn draw(params: PagerParams<'_>) {
         close_hover,
         host_blur,
         backdrop,
+        liquid,
     } = params;
     if alpha <= 0.01 {
         return;
@@ -220,7 +222,7 @@ pub fn draw(params: PagerParams<'_>) {
     let close_hover = close_hover.clamp(0.0, 1.0);
     let layout = visible_layout(island, count, scale, above, alpha, bar_hover, close_hover);
     if let Some(bar) = layout.bar {
-        draw_surface(painter, bar, scale, alpha, host_blur, backdrop);
+        draw_surface(painter, bar, scale, alpha, host_blur, backdrop, liquid);
         for (dot, weight) in dots(bar, count, position, scale) {
             let dot_alpha = INACTIVE_DOT_ALPHA + (1.0 - INACTIVE_DOT_ALPHA) * weight;
             painter.fill_round_rect(
@@ -230,7 +232,15 @@ pub fn draw(params: PagerParams<'_>) {
             );
         }
     }
-    draw_surface(painter, layout.close, scale, alpha, host_blur, backdrop);
+    draw_surface(
+        painter,
+        layout.close,
+        scale,
+        alpha,
+        host_blur,
+        backdrop,
+        liquid,
+    );
     if close_hover <= 0.01 {
         return;
     }
@@ -255,9 +265,23 @@ fn draw_surface(
     alpha: f32,
     host_blur: bool,
     backdrop: Option<&Image>,
+    liquid: Option<(&Backdrop, crate::ui::island::LiquidOptics)>,
 ) {
     let radius = rect.height() / 2.0;
     let path = Path::continuous_rounded_rect(rect, radius);
+
+    if let Some((liquid, optics)) = liquid {
+        let shape = LiquidShape {
+            rect,
+            radius,
+            secondary: None,
+            smoothing: 0.0,
+        };
+        let material = optics.apply(LiquidMaterial::control(scale));
+        if painter.draw_liquid_glass(liquid, &shape, &material, 1.0, alpha) {
+            return;
+        }
+    }
 
     painter.save();
     painter.clip_path_difference(&path);

@@ -48,6 +48,7 @@ pub(super) fn draw_background(params: BackgroundParams<'_, '_>) {
         island_style
     };
     match island_style {
+        "liquid" => draw_solid(painter, island_path, fallback_color),
         "glass" => {
             if host_backdrop {
                 draw_host_glass(painter, island_path);

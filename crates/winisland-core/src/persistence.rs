@@ -144,6 +144,31 @@ pub fn load_config_at(path: &Path) -> AppConfig {
     } else {
         AppConfig::default().music_text_line_spacing
     };
+    config.liquid_glass_blur = if config.liquid_glass_blur.is_finite() {
+        config.liquid_glass_blur.clamp(0.0, 30.0)
+    } else {
+        AppConfig::default().liquid_glass_blur
+    };
+    config.liquid_glass_refraction = if config.liquid_glass_refraction.is_finite() {
+        config.liquid_glass_refraction.clamp(0.0, 400.0)
+    } else {
+        AppConfig::default().liquid_glass_refraction
+    };
+    config.liquid_glass_dispersion = if config.liquid_glass_dispersion.is_finite() {
+        config.liquid_glass_dispersion.clamp(0.0, 100.0)
+    } else {
+        AppConfig::default().liquid_glass_dispersion
+    };
+    config.liquid_glass_tint = if config.liquid_glass_tint.is_finite() {
+        config.liquid_glass_tint.clamp(0.0, 200.0)
+    } else {
+        AppConfig::default().liquid_glass_tint
+    };
+    config.glass_blur = if config.glass_blur.is_finite() {
+        config.glass_blur.clamp(0.0, 50.0)
+    } else {
+        AppConfig::default().glass_blur
+    };
     config.expanded_width = config.expanded_width.clamp(200.0, 2000.0);
     config.expanded_height = config.expanded_height.clamp(100.0, 1000.0);
     let resource_span =

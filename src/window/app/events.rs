@@ -35,7 +35,7 @@ impl App {
                     if self.tray_installed {
                         let _ = crate::platform::shell().tray_update(
                             crate::platform::tray_theme(is_light),
-                            crate::platform::tray_labels(self.visible),
+                            crate::platform::tray_labels(self.visible, self.recorder.is_some()),
                         );
                     }
                 }
@@ -392,6 +392,9 @@ impl App {
                                     surface_bounds.top,
                                 ))
                             });
+                        let liquid_scale = self.config.compact_scale
+                            + (self.config.expanded_scale - self.config.compact_scale)
+                                * progress.clamp(0.0, 1.0);
                         let host_backdrop = super::system::update_host_backdrop(
                             &mut self.host_backdrop,
                             win.id(),
@@ -406,7 +409,53 @@ impl App {
                                 height: surface_bounds.height(),
                                 radius: self.springs.r.value,
                                 outline,
-                                extras: pager_backdrop,
+                                extras: if self.config.island_style == "liquid" {
+                                    [None, None]
+                                } else {
+                                    pager_backdrop
+                                },
+                                blur: if self.config.island_style == "glass" {
+                                    self.config.glass_blur * liquid_scale
+                                } else {
+                                    0.0
+                                },
+                            },
+                        );
+                        let (win_x, win_y) = (self.geom.win_x as f32, self.geom.win_y as f32);
+                        let liquid_interest = pager_backdrop.iter().flatten().fold(
+                            surface_bounds,
+                            |bounds, shape| {
+                                winisland_render::Rect::from_ltrb(
+                                    bounds.left.min(shape.screen_x - win_x),
+                                    bounds.top.min(shape.screen_y - win_y),
+                                    bounds.right.max(shape.screen_x - win_x + shape.width),
+                                    bounds.bottom.max(shape.screen_y - win_y + shape.height),
+                                )
+                            },
+                        );
+                        super::system::update_backdrop_capture(
+                            &mut self.backdrop_capture,
+                            &mut renderer,
+                            super::system::BackdropCaptureInput {
+                                window: self.window,
+                                origin: (self.geom.win_x, self.geom.win_y),
+                                frame_interval: self.display_frame_interval,
+                                interest: if self.recorder.is_some() {
+                                    let size = win.inner_size();
+                                    winisland_render::Rect::from_xywh(
+                                        0.0,
+                                        0.0,
+                                        size.width as f32,
+                                        size.height as f32,
+                                    )
+                                } else {
+                                    liquid_interest
+                                },
+                                frost_sigma: self.config.liquid_glass_blur * liquid_scale,
+                                active: self.recorder.is_some()
+                                    || (!compact_components_hidden
+                                        && self.config.island_style == "liquid"),
+                                animating: self.recorder.is_some() || self.springs.any_animating(),
                             },
                         );
                         let main_target = renderer.main_target();
@@ -473,6 +522,14 @@ impl App {
                                                 &self.config.island_style
                                             },
                                             host_backdrop,
+                                            liquid_optics: crate::ui::island::LiquidOptics {
+                                                refraction: self.config.liquid_glass_refraction
+                                                    / 100.0,
+                                                dispersion: self.config.liquid_glass_dispersion
+                                                    / 100.0,
+                                                tint: self.config.liquid_glass_tint / 100.0,
+                                            },
+                                            liquid_siri: self.config.liquid_glass_siri,
                                             use_blur: self.config.motion_blur,
                                             font_size: self.config.font_size,
                                             music_text_y_offset: self.config.music_text_y_offset,
@@ -642,6 +699,8 @@ impl AppHandler for App {
         }
         self.close_settings();
         self.close_guide();
+        self.stop_recording();
+        self.stop_backdrop_capture();
         if let Some(window_ref) = self.window.take() {
             window().release_host_backdrop(window_ref.id());
             self.host_backdrop = false;

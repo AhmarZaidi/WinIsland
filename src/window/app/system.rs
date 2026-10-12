@@ -10,7 +10,9 @@ use winisland_plugin_package::activate as zip_loader;
 use winisland_plugin_package::marketplace::{self, MarketplacePlugin};
 use winisland_render::RendererOptions;
 
-use super::App;
+use super::{App, BackdropCaptureState};
+
+const BACKDROP_CAPTURE_RETRY: Duration = Duration::from_secs(10);
 
 pub(super) fn update_host_backdrop(
     host_backdrop: &mut bool,
@@ -166,6 +168,7 @@ impl App {
     }
 
     pub(super) fn invalidate_renderer(&mut self, reason: &str, now: Instant) {
+        self.stop_recording();
         let renderer = self.renderer.take();
         if renderer.is_some() {
             log::warn!("Renderer invalidated: {reason}");
@@ -175,6 +178,7 @@ impl App {
         }
         crate::utils::backdrop::clear_blurred_cover_cache();
         crate::ui::expanded::music_view::clear_cover_cache();
+        self.stop_backdrop_capture();
         if let Some(window_ref) = self.window {
             window().release_host_backdrop(window_ref.id());
         }
@@ -195,6 +199,53 @@ impl App {
         if !self.host_backdrop {
             crate::platform::update_capabilities(|caps| caps.host_backdrop = false);
         }
+    }
+
+    pub(super) fn start_recording(&mut self) {
+        let Some(renderer) = self.renderer.as_mut() else {
+            return;
+        };
+        match crate::utils::recorder::Recorder::start() {
+            Ok((recorder, frames)) => {
+                renderer.start_recording(frames, crate::utils::recorder::RECORDING_FPS);
+                self.recorder = Some(recorder);
+                log::info!("Recording island footage");
+            }
+            Err(error) => log::warn!("Recording could not start: {error}"),
+        }
+        self.refresh_tray_labels();
+    }
+
+    pub(super) fn stop_recording(&mut self) {
+        let Some(recorder) = self.recorder.take() else {
+            return;
+        };
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.stop_recording();
+        }
+        match recorder.finish() {
+            Ok((directory, frames)) => {
+                log::info!("Recorded {frames} frames to {}", directory.display());
+                if let Err(error) = crate::platform::shell().reveal_path(&directory) {
+                    log::warn!("Recording folder could not be shown: {error}");
+                }
+            }
+            Err(error) => log::warn!("Recording could not be finished: {error}"),
+        }
+        self.refresh_tray_labels();
+    }
+
+    fn refresh_tray_labels(&self) {
+        if self.tray_installed {
+            let _ = crate::platform::shell().tray_update(
+                crate::platform::tray_theme(self.is_light_theme),
+                crate::platform::tray_labels(self.visible, self.recorder.is_some()),
+            );
+        }
+    }
+
+    pub(super) fn stop_backdrop_capture(&mut self) {
+        stop_backdrop_capture(&mut self.backdrop_capture, self.window);
     }
 
     pub(super) fn hide_host_backdrop(&self) {
@@ -505,7 +556,7 @@ impl App {
                     }
                     let _ = crate::platform::shell().tray_update(
                         crate::platform::tray_theme(self.is_light_theme),
-                        crate::platform::tray_labels(self.visible),
+                        crate::platform::tray_labels(self.visible, self.recorder.is_some()),
                     );
                     log::info!("Tray: visibility toggled to {}", self.visible);
                 }
@@ -516,6 +567,14 @@ impl App {
                 TrayAction::ShowGuide => {
                     log::info!("Tray: opening beginner guide");
                     self.open_guide();
+                }
+                TrayAction::ToggleRecording => {
+                    if self.recorder.is_some() {
+                        self.stop_recording();
+                    } else {
+                        self.start_recording();
+                    }
+                    window_ref.request_redraw();
                 }
                 TrayAction::Restart => {
                     log::info!("Tray: restarting application");
@@ -688,4 +747,95 @@ impl App {
             }
         }
     }
+}
+
+pub(super) struct BackdropCaptureInput {
+    pub(super) window: Option<WindowRef>,
+    pub(super) origin: (i32, i32),
+    pub(super) frame_interval: Duration,
+    pub(super) interest: winisland_render::Rect,
+    pub(super) frost_sigma: f32,
+    pub(super) active: bool,
+    pub(super) animating: bool,
+}
+
+pub(super) fn update_backdrop_capture(
+    state: &mut BackdropCaptureState,
+    renderer: &mut winisland_render::Renderer,
+    input: BackdropCaptureInput,
+) -> bool {
+    use winisland_platform::{BackdropCaptureRequest, Point, Rect};
+
+    let Some(window_ref) = input.window else {
+        return false;
+    };
+    if !input.active {
+        stop_backdrop_capture(state, input.window);
+        renderer.release_backdrop();
+        return false;
+    }
+    match *state {
+        BackdropCaptureState::Running => {}
+        BackdropCaptureState::Failed(at) if at.elapsed() < BACKDROP_CAPTURE_RETRY => {
+            return false;
+        }
+        _ => match window().start_backdrop_capture(window_ref.id(), renderer.adapter_luid()) {
+            Ok(()) => *state = BackdropCaptureState::Running,
+            Err(error) => {
+                log::warn!("Liquid glass backdrop capture is unavailable: {error}");
+                *state = BackdropCaptureState::Failed(Instant::now());
+                return false;
+            }
+        },
+    }
+    let size = window_ref.inner_size();
+    let share = match renderer.backdrop_share(size.width, size.height) {
+        Ok(share) => share,
+        Err(error) => {
+            log::warn!("Liquid glass backdrop texture is unavailable: {error}");
+            stop_backdrop_capture(state, input.window);
+            *state = BackdropCaptureState::Failed(Instant::now());
+            return false;
+        }
+    };
+    let (x, y) = input.origin;
+    let margin = (input.frost_sigma * 3.0).ceil();
+    let interest = input.interest;
+    let refresh_hz = (1_000_000_000 / input.frame_interval.as_nanos().max(1)) as u32;
+    let integrated =
+        crate::platform::display().gpu_profile() == winisland_platform::GpuProfile::Integrated;
+    let rate_limit = match (integrated, input.animating) {
+        (false, true) => 60,
+        (true, false) => 20,
+        _ => 30,
+    };
+    let frame = window().update_backdrop_capture(
+        window_ref.id(),
+        BackdropCaptureRequest {
+            share,
+            origin: Point { x, y },
+            interest: Rect {
+                left: x + (interest.left - margin).floor() as i32,
+                top: y + (interest.top - margin).floor() as i32,
+                right: x + (interest.right + margin).ceil() as i32,
+                bottom: y + (interest.bottom + margin).ceil() as i32,
+            },
+            read_value: renderer.backdrop_read_value(),
+            max_rate_hz: refresh_hz.clamp(1, rate_limit),
+        },
+    );
+    renderer
+        .set_backdrop_frame(frame, input.frost_sigma)
+        .is_ok()
+        && frame.is_some()
+}
+
+fn stop_backdrop_capture(state: &mut BackdropCaptureState, window_ref: Option<WindowRef>) {
+    if *state != BackdropCaptureState::Running {
+        return;
+    }
+    if let Some(window_ref) = window_ref {
+        window().stop_backdrop_capture(window_ref.id());
+    }
+    *state = BackdropCaptureState::Stopped;
 }
