@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.5.1
+- Fixed the Liquid Glass screen capture border so the yellow recording outline is hidden on supported Windows installations
+- Added the required Windows borderless capture capability to packaged installers
+
 ### v1.5.0
 - Added a Liquid Glass island style with refraction, dispersion, and edge highlights, with adjustable background blur, refraction, dispersion, and dark tint; while it is on, the island does not appear in screenshots or screen recordings
 - Added an experimental Siri AI style for Liquid Glass with a black-to-glass gradient
