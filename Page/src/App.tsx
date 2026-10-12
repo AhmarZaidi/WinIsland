@@ -36,7 +36,6 @@ import { HashRouter, Link, useLocation } from 'react-router-dom'
 import appIcon from '../../resources/icon-dark.ico'
 import settingsIcon from '../../resources/in_app/settings/settings.png'
 import widgetIcon from '../../resources/in_app/settings/widget.png'
-import allByMyDesignCover from './assets/all-by-my-design.jpg'
 import { GlassFilter } from './components/GlassFilter'
 import { ProductDemo } from './components/ProductDemo'
 import {
@@ -505,11 +504,13 @@ function HomePage({ locale }: { locale: Locale }) {
               >
                 <div className="feature-visual" aria-hidden="true">
                   {index === 0 && (
-                    <div className="mini-player">
-                      <img className="mini-cover" src={allByMyDesignCover} alt="" />
-                      <span className="mini-lyric">{text.demo.lyric}</span>
-                      <span className="mini-wave"><i /><i /><i /><i /><i /><i /></span>
-                    </div>
+                    <img
+                      className="feature-island"
+                      src={locale === 'zh' ? '/island/compact-wanfeng-zh.webp' : '/island/compact-afterglow-en.webp'}
+                      width={locale === 'zh' ? 266 : 397}
+                      height={47}
+                      alt=""
+                    />
                   )}
                   {index === 1 && (
                     <div className="motion-orbits">
