@@ -1,4 +1,12 @@
 import { useEffect, useRef } from 'react'
+import expandedAfterglow from '../assets/island/expanded-afterglow.webp'
+import notifyEn from '../assets/island/notify-en.webp'
+import notifyZh from '../assets/island/notify-zh.webp'
+import widgetsEn from '../assets/island/widgets-en.webp'
+import widgetsZh from '../assets/island/widgets-zh.webp'
+import heroLoopMp4 from '../assets/media/hero-loop.mp4'
+import heroLoopPoster from '../assets/media/hero-loop-poster.jpg'
+import heroLoopWebm from '../assets/media/hero-loop.webm'
 import type { DemoMode, Locale } from '../content'
 
 type ProductDemoProps = {
@@ -8,9 +16,9 @@ type ProductDemoProps = {
 }
 
 const STAGE_IMAGES: Record<DemoMode, (locale: Locale) => { src: string; width: number; height: number }> = {
-  media: () => ({ src: '/island/expanded-afterglow.webp', width: 1106, height: 703 }),
-  notification: (locale) => ({ src: `/island/notify-${locale}.webp`, width: 1002, height: 258 }),
-  widgets: (locale) => ({ src: `/island/widgets-${locale}.webp`, width: 1106, height: 703 }),
+  media: () => ({ src: expandedAfterglow, width: 1106, height: 703 }),
+  notification: (locale) => ({ src: locale === 'zh' ? notifyZh : notifyEn, width: 1002, height: 258 }),
+  widgets: (locale) => ({ src: locale === 'zh' ? widgetsZh : widgetsEn, width: 1106, height: 703 }),
 }
 
 const MODES: DemoMode[] = ['media', 'notification', 'widgets']
@@ -30,15 +38,15 @@ function HeroVideo() {
       className="hero-video"
       width={2160}
       height={900}
-      poster="/media/hero-loop-poster.jpg"
+      poster={heroLoopPoster}
       muted
       loop
       playsInline
       preload="auto"
       aria-hidden="true"
     >
-      <source src="/media/hero-loop.webm" type="video/webm" />
-      <source src="/media/hero-loop.mp4" type="video/mp4" />
+      <source src={heroLoopWebm} type="video/webm" />
+      <source src={heroLoopMp4} type="video/mp4" />
     </video>
   )
 }
