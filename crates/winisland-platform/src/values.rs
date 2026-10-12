@@ -170,6 +170,7 @@ pub struct HostBackdropParams {
     pub radius: f32,
     pub outline: Option<std::sync::Arc<[ClipSegment]>>,
     pub extras: [Option<BackdropShape>; 2],
+    pub blur: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -189,6 +190,35 @@ pub struct BackdropShape {
     pub height: f32,
     pub radius: f32,
     pub opacity: f32,
+}
+
+/// GPU objects a renderer shares with a backdrop capture; values are NT handles it keeps open.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BackdropShare {
+    pub texture: usize,
+    pub write_fence: usize,
+    pub read_fence: usize,
+    pub width: u32,
+    pub height: u32,
+    pub generation: u64,
+}
+
+/// Backdrop capture request; rectangles are screen pixels and `read_value` is the last
+/// read-fence value the renderer signaled after sampling the shared texture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BackdropCaptureRequest {
+    pub share: BackdropShare,
+    pub origin: Point,
+    pub interest: Rect,
+    pub read_value: u64,
+    pub max_rate_hz: u32,
+}
+
+/// Result of a backdrop update; the renderer must wait for `write_value` on the write fence.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BackdropCaptureFrame {
+    pub write_value: u64,
+    pub serial: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

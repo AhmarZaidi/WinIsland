@@ -4,6 +4,7 @@
 
 mod audio;
 mod backdrop;
+mod capture;
 mod com;
 mod device_activity;
 mod display;

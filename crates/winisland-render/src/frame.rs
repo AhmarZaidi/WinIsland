@@ -1,15 +1,20 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use skia_safe::{Color, ImageInfo, Paint, Rect, Surface, gpu, image_filters};
+use winisland_platform::{BackdropCaptureFrame, BackdropShare};
 
-use crate::backend::{D3DDevice, RenderTarget, check_surface_supported};
+use crate::backend::{D3DDevice, RenderTarget, SharedBackdrop, check_surface_supported};
 use crate::error::{RenderError, RenderResult};
 use crate::image::Image;
+use crate::liquid::Backdrop;
 use crate::painter::Painter;
 use crate::surface::NativeSurface;
 use crate::types::Mipmapped;
 
 const MAIN_TARGET: RendererTargetId = RendererTargetId(0);
+
+static BACKDROP_GENERATION: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct RendererOptions {
@@ -25,9 +30,21 @@ impl RendererOptions {
 
 pub struct DrawingContext<'a> {
     direct_context: &'a mut gpu::DirectContext,
+    backdrop: Option<&'a mut SharedBackdrop>,
 }
 
 impl DrawingContext<'_> {
+    /// Returns the screen content captured beneath this frame's window, if any.
+    pub fn backdrop(&mut self) -> Option<Backdrop> {
+        let backdrop = self.backdrop.as_mut()?;
+        let (sharp, blurred) = backdrop.images(self.direct_context)?;
+        Some(Backdrop {
+            sharp,
+            blurred,
+            blur_scale: backdrop.frost_scale(),
+        })
+    }
+
     pub fn prepare_image(&mut self, image: Image, mipmapped: Mipmapped) -> Option<Image> {
         let mipmapped = match mipmapped {
             Mipmapped::No => gpu::Mipmapped::No,
@@ -65,6 +82,7 @@ pub struct Renderer {
     device: D3DDevice,
     next_target_id: u64,
     failure: Option<String>,
+    backdrop: Option<SharedBackdrop>,
 }
 
 impl Renderer {
@@ -78,6 +96,7 @@ impl Renderer {
             device,
             next_target_id: 1,
             failure: None,
+            backdrop: None,
         })
     }
 
@@ -101,6 +120,7 @@ impl Renderer {
         let info = ImageInfo::new_n32_premul((96, 96), None);
         let mut drawing_context = DrawingContext {
             direct_context: &mut device.context,
+            backdrop: None,
         };
         let Some(mut surface) = drawing_context.render_surface(&info) else {
             return;
@@ -122,6 +142,53 @@ impl Renderer {
 
     pub fn main_target(&self) -> RendererTargetId {
         MAIN_TARGET
+    }
+
+    pub fn adapter_luid(&self) -> u64 {
+        self.device.adapter_luid()
+    }
+
+    /// Returns a shared texture covering at least `width` x `height` pixels for backdrop capture.
+    pub fn backdrop_share(&mut self, width: u32, height: u32) -> RenderResult<BackdropShare> {
+        self.check_ready()?;
+        if let Some(backdrop) = &self.backdrop
+            && backdrop.fits(width, height)
+        {
+            return Ok(backdrop.share());
+        }
+        self.release_backdrop();
+        let generation = BACKDROP_GENERATION.fetch_add(1, Ordering::Relaxed);
+        let backdrop = self.device.create_backdrop(width, height, generation)?;
+        let share = backdrop.share();
+        self.backdrop = Some(backdrop);
+        Ok(share)
+    }
+
+    pub fn backdrop_read_value(&self) -> u64 {
+        self.backdrop.as_ref().map_or(0, SharedBackdrop::read_value)
+    }
+
+    /// Makes the next frames sample `frame`; the GPU waits for the capture copy before reading.
+    pub fn set_backdrop_frame(
+        &mut self,
+        frame: Option<BackdropCaptureFrame>,
+        frost_sigma: f32,
+    ) -> RenderResult<()> {
+        let Some(backdrop) = self.backdrop.as_mut() else {
+            return Ok(());
+        };
+        let result = backdrop.set_frame(self.device.queue(), frame, frost_sigma);
+        self.record_result(result)
+    }
+
+    pub fn release_backdrop(&mut self) {
+        if self.backdrop.is_none() {
+            return;
+        }
+        if let Err(error) = self.device.synchronize() {
+            log::warn!("Backdrop release synchronization failed: {error}");
+        }
+        self.backdrop = None;
     }
 
     fn draw<T>(
@@ -166,6 +233,7 @@ impl Renderer {
         let output = draw(
             &mut DrawingContext {
                 direct_context: &mut self.device.context,
+                backdrop: self.backdrop.as_mut(),
             },
             surface,
         );
@@ -176,6 +244,9 @@ impl Renderer {
             &gpu::FlushInfo::default(),
         );
         self.device.submit(gpu::SyncCpu::No)?;
+        if let Some(backdrop) = self.backdrop.as_mut() {
+            backdrop.finish_frame(self.device.queue())?;
+        }
         let present_result = target.present();
         self.device.check_health()?;
         present_result?;

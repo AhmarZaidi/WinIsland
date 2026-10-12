@@ -14,7 +14,9 @@ use windows::Win32::Graphics::{
 use crate::error::RenderResult;
 use crate::surface::NativeSurface;
 
+mod backdrop;
 mod target;
+pub(crate) use backdrop::SharedBackdrop;
 pub(crate) use target::RenderTarget;
 
 const GPU_RESOURCE_CACHE_LIMIT: usize = 12 * 1024 * 1024;
@@ -99,6 +101,25 @@ impl D3DDevice {
             backend,
             factory,
         })
+    }
+
+    pub(crate) fn adapter_luid(&self) -> u64 {
+        // SAFETY: This only queries the retained device.
+        let luid = unsafe { self.backend.device.GetAdapterLuid() };
+        (u64::from(luid.HighPart as u32) << 32) | u64::from(luid.LowPart)
+    }
+
+    pub(crate) fn create_backdrop(
+        &self,
+        width: u32,
+        height: u32,
+        generation: u64,
+    ) -> RenderResult<SharedBackdrop> {
+        SharedBackdrop::new(&self.backend.device, width, height, generation)
+    }
+
+    pub(crate) fn queue(&self) -> &windows::Win32::Graphics::Direct3D12::ID3D12CommandQueue {
+        &self.backend.queue
     }
 
     pub(crate) fn create_target(

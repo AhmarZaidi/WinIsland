@@ -9,6 +9,7 @@ mod convert;
 mod error;
 mod frame;
 mod image;
+mod liquid;
 mod painter;
 mod path;
 mod surface;
@@ -18,6 +19,7 @@ mod types;
 pub use error::{RenderError, RenderResult};
 pub use frame::{DrawingContext, Renderer, RendererOptions, RendererTargetId};
 pub use image::Image;
+pub use liquid::{Backdrop, LiquidMaterial, LiquidShape};
 pub use painter::Painter;
 pub use path::{Path, PathBuilder};
 #[doc(hidden)]

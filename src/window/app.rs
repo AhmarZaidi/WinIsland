@@ -59,6 +59,13 @@ enum DragAxis {
     Vertical,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum BackdropCaptureState {
+    Stopped,
+    Running,
+    Failed(Instant),
+}
+
 struct PluginMediaSource {
     resource_id: u64,
     available_controls: u32,
@@ -69,6 +76,7 @@ pub struct App {
     plugin_ui: plugins::PluginUiState,
     window: Option<WindowRef>,
     host_backdrop: bool,
+    backdrop_capture: BackdropCaptureState,
     renderer: Option<Renderer>,
     settings: Option<SettingsApp>,
     guide: Option<crate::window::guide::GuideApp>,
@@ -205,6 +213,7 @@ impl Default for App {
             plugin_ui: plugins::PluginUiState::default(),
             window: None,
             host_backdrop: false,
+            backdrop_capture: BackdropCaptureState::Stopped,
             renderer: None,
             settings: None,
             guide: None,

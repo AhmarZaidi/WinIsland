@@ -33,7 +33,20 @@ impl SettingsApp {
             styles.push((tr("style_glass"), style == "glass"));
         }
         styles.push((tr("style_dynamic"), style == "dynamic"));
+        styles.push((tr("style_liquid_glass"), style == "liquid"));
         page.row_source(tr("island_style"), styles, true, EffectsAction::IslandStyle);
+        if style == "glass" {
+            page.setting(&self.config, AppConfigField::GlassBlur, true);
+        }
+        if style == "liquid" {
+            page.setting(&self.config, AppConfigField::LiquidGlassBlur, true);
+            page.setting(&self.config, AppConfigField::LiquidGlassRefraction, true);
+            page.setting(&self.config, AppConfigField::LiquidGlassDispersion, true);
+            page.setting(&self.config, AppConfigField::LiquidGlassTint, true);
+            page.setting(&self.config, AppConfigField::LiquidGlassSiri, true);
+            page.row_label(tr("liquid_glass_siri_note"));
+            page.row_label(tr("style_liquid_note"));
+        }
         if !host_backdrop {
             page.row_label(tr("platform_unavailable"));
         }
@@ -100,6 +113,8 @@ impl SettingsApp {
                 }
                 labels.push(tr("style_dynamic"));
                 values.push("dynamic".to_string());
+                labels.push(tr("style_liquid_glass"));
+                values.push("liquid".to_string());
                 let selected = values
                     .iter()
                     .position(|value| value == &self.config.island_style)
