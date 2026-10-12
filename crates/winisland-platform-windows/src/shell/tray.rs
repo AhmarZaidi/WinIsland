@@ -11,6 +11,7 @@ struct WindowsTray {
     toggle: MenuItem,
     settings: MenuItem,
     guide: MenuItem,
+    record: MenuItem,
     restart: MenuItem,
     exit: MenuItem,
     theme: TrayTheme,
@@ -37,11 +38,13 @@ pub(super) fn install(theme: TrayTheme, labels: TrayLabels) -> Result<(), Platfo
     let toggle = MenuItem::new(&labels.toggle, true, None);
     let settings = MenuItem::new(&labels.settings, true, None);
     let guide = MenuItem::new(&labels.guide, true, None);
+    let record = MenuItem::new(&labels.record, true, None);
     let restart = MenuItem::new(&labels.restart, true, None);
     let exit = MenuItem::new(&labels.exit, true, None);
     menu.append(&toggle).map_err(PlatformError::backend)?;
     menu.append(&settings).map_err(PlatformError::backend)?;
     menu.append(&guide).map_err(PlatformError::backend)?;
+    menu.append(&record).map_err(PlatformError::backend)?;
     menu.append(&restart).map_err(PlatformError::backend)?;
     menu.append(&exit).map_err(PlatformError::backend)?;
     let tray = TrayIconBuilder::new()
@@ -58,6 +61,7 @@ pub(super) fn install(theme: TrayTheme, labels: TrayLabels) -> Result<(), Platfo
             toggle,
             settings,
             guide,
+            record,
             restart,
             exit,
             theme,
@@ -79,6 +83,7 @@ pub(super) fn update(theme: TrayTheme, labels: TrayLabels) -> Result<(), Platfor
         tray.toggle.set_text(&labels.toggle);
         tray.settings.set_text(&labels.settings);
         tray.guide.set_text(&labels.guide);
+        tray.record.set_text(&labels.record);
         tray.restart.set_text(&labels.restart);
         tray.exit.set_text(&labels.exit);
         Ok(())
@@ -100,6 +105,8 @@ pub(super) fn poll_events() -> Vec<TrayAction> {
             Some(TrayAction::OpenSettings)
         } else if event.id == tray.guide.id() {
             Some(TrayAction::ShowGuide)
+        } else if event.id == tray.record.id() {
+            Some(TrayAction::ToggleRecording)
         } else if event.id == tray.restart.id() {
             Some(TrayAction::Restart)
         } else if event.id == tray.exit.id() {

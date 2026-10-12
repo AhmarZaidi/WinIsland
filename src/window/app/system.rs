@@ -168,6 +168,7 @@ impl App {
     }
 
     pub(super) fn invalidate_renderer(&mut self, reason: &str, now: Instant) {
+        self.stop_recording();
         let renderer = self.renderer.take();
         if renderer.is_some() {
             log::warn!("Renderer invalidated: {reason}");
@@ -197,6 +198,49 @@ impl App {
         };
         if !self.host_backdrop {
             crate::platform::update_capabilities(|caps| caps.host_backdrop = false);
+        }
+    }
+
+    pub(super) fn start_recording(&mut self) {
+        let Some(renderer) = self.renderer.as_mut() else {
+            return;
+        };
+        match crate::utils::recorder::Recorder::start() {
+            Ok((recorder, frames)) => {
+                renderer.start_recording(frames, crate::utils::recorder::RECORDING_FPS);
+                self.recorder = Some(recorder);
+                log::info!("Recording island footage");
+            }
+            Err(error) => log::warn!("Recording could not start: {error}"),
+        }
+        self.refresh_tray_labels();
+    }
+
+    pub(super) fn stop_recording(&mut self) {
+        let Some(recorder) = self.recorder.take() else {
+            return;
+        };
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.stop_recording();
+        }
+        match recorder.finish() {
+            Ok((directory, frames)) => {
+                log::info!("Recorded {frames} frames to {}", directory.display());
+                if let Err(error) = crate::platform::shell().reveal_path(&directory) {
+                    log::warn!("Recording folder could not be shown: {error}");
+                }
+            }
+            Err(error) => log::warn!("Recording could not be finished: {error}"),
+        }
+        self.refresh_tray_labels();
+    }
+
+    fn refresh_tray_labels(&self) {
+        if self.tray_installed {
+            let _ = crate::platform::shell().tray_update(
+                crate::platform::tray_theme(self.is_light_theme),
+                crate::platform::tray_labels(self.visible, self.recorder.is_some()),
+            );
         }
     }
 
@@ -512,7 +556,7 @@ impl App {
                     }
                     let _ = crate::platform::shell().tray_update(
                         crate::platform::tray_theme(self.is_light_theme),
-                        crate::platform::tray_labels(self.visible),
+                        crate::platform::tray_labels(self.visible, self.recorder.is_some()),
                     );
                     log::info!("Tray: visibility toggled to {}", self.visible);
                 }
@@ -523,6 +567,14 @@ impl App {
                 TrayAction::ShowGuide => {
                     log::info!("Tray: opening beginner guide");
                     self.open_guide();
+                }
+                TrayAction::ToggleRecording => {
+                    if self.recorder.is_some() {
+                        self.stop_recording();
+                    } else {
+                        self.start_recording();
+                    }
+                    window_ref.request_redraw();
                 }
                 TrayAction::Restart => {
                     log::info!("Tray: restarting application");

@@ -35,7 +35,7 @@ impl App {
                     if self.tray_installed {
                         let _ = crate::platform::shell().tray_update(
                             crate::platform::tray_theme(is_light),
-                            crate::platform::tray_labels(self.visible),
+                            crate::platform::tray_labels(self.visible, self.recorder.is_some()),
                         );
                     }
                 }
@@ -440,11 +440,22 @@ impl App {
                                 window: self.window,
                                 origin: (self.geom.win_x, self.geom.win_y),
                                 frame_interval: self.display_frame_interval,
-                                interest: liquid_interest,
+                                interest: if self.recorder.is_some() {
+                                    let size = win.inner_size();
+                                    winisland_render::Rect::from_xywh(
+                                        0.0,
+                                        0.0,
+                                        size.width as f32,
+                                        size.height as f32,
+                                    )
+                                } else {
+                                    liquid_interest
+                                },
                                 frost_sigma: self.config.liquid_glass_blur * liquid_scale,
-                                active: !compact_components_hidden
-                                    && self.config.island_style == "liquid",
-                                animating: self.springs.any_animating(),
+                                active: self.recorder.is_some()
+                                    || (!compact_components_hidden
+                                        && self.config.island_style == "liquid"),
+                                animating: self.recorder.is_some() || self.springs.any_animating(),
                             },
                         );
                         let main_target = renderer.main_target();
@@ -690,6 +701,7 @@ impl AppHandler for App {
         }
         self.close_settings();
         self.close_guide();
+        self.stop_recording();
         self.stop_backdrop_capture();
         if let Some(window_ref) = self.window.take() {
             window().release_host_backdrop(window_ref.id());

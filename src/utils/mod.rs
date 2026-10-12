@@ -4,6 +4,7 @@ pub mod color;
 pub(crate) mod cover;
 pub mod logger;
 pub mod mouse;
+pub(crate) mod recorder;
 pub mod scroll;
 pub mod settings_ui;
 pub(crate) mod shape;

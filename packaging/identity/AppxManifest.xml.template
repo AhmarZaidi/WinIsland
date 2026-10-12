@@ -20,6 +20,7 @@
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
     <rescap:Capability Name="unvirtualizedResources" />
+    <rescap:Capability Name="graphicsCaptureWithoutBorder" />
   </Capabilities>
   <Applications>
     <Application Id="WinIsland" Executable="WinIsland.exe" uap10:TrustLevel="mediumIL" uap10:RuntimeBehavior="win32App">

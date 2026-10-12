@@ -17,7 +17,7 @@ pub mod text;
 mod types;
 
 pub use error::{RenderError, RenderResult};
-pub use frame::{DrawingContext, Renderer, RendererOptions, RendererTargetId};
+pub use frame::{DrawingContext, RecordedFrame, Renderer, RendererOptions, RendererTargetId};
 pub use image::Image;
 pub use liquid::{Backdrop, LiquidMaterial, LiquidShape};
 pub use painter::Painter;

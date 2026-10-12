@@ -1,16 +1,19 @@
 use std::cell::{Cell, RefCell};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
 use parking_lot::Mutex;
 use windows::{
+    Foundation::Metadata::ApiInformation,
     Foundation::TimeSpan,
     Graphics::Capture::{
-        Direct3D11CaptureFrame, Direct3D11CaptureFramePool, GraphicsCaptureDirtyRegionMode,
-        GraphicsCaptureItem, GraphicsCaptureSession,
+        Direct3D11CaptureFrame, Direct3D11CaptureFramePool, GraphicsCaptureAccess,
+        GraphicsCaptureAccessKind, GraphicsCaptureDirtyRegionMode, GraphicsCaptureItem,
+        GraphicsCaptureSession,
     },
     Graphics::DirectX::{Direct3D11::IDirect3DDevice, DirectXPixelFormat},
     Graphics::SizeInt32,
+    Security::Authorization::AppCapabilityAccess::AppCapabilityAccessStatus,
     Win32::{
         Foundation::{HANDLE, HMODULE, HWND, LUID},
         Graphics::{
@@ -37,13 +40,19 @@ use windows::{
         },
         UI::WindowsAndMessaging::{SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE},
     },
-    core::Interface,
+    core::{HSTRING, Interface},
 };
 use winisland_platform::{BackdropCaptureFrame, BackdropCaptureRequest, BackdropShare, Rect};
 
 const FRAME_BUFFERS: i32 = 2;
 const PROBE_STEP: usize = 2;
 const PROBE_ALIGN: u32 = 64;
+const BORDER_UNKNOWN: u8 = 0;
+const BORDER_PENDING: u8 = 1;
+const BORDER_OPTIONAL: u8 = 2;
+const BORDER_REQUIRED: u8 = 3;
+
+static BORDER_ACCESS: AtomicU8 = AtomicU8::new(BORDER_UNKNOWN);
 
 #[derive(Default)]
 struct Latest {
@@ -76,6 +85,7 @@ struct Session {
     session: GraphicsCaptureSession,
     token: i64,
     rate_hz: Cell<u32>,
+    borderless: Cell<bool>,
 }
 
 struct Import {
@@ -297,6 +307,14 @@ impl BackdropCapture {
                 session.rate_hz.set(rate_hz);
                 set_rate(&session.session, rate_hz);
             }
+            if !session.borderless.get() && borderless_allowed() {
+                session.borderless.set(true);
+                hide_border(&session.session);
+            }
+            if border_access_required() {
+                self.session.borrow_mut().take();
+                return Err("Borderless screen capture access is unavailable".to_string());
+            }
             return Ok(());
         }
         self.session.borrow_mut().take();
@@ -349,8 +367,12 @@ impl Session {
             .CreateCaptureSession(&item)
             .map_err(|error| format!("Capture session failed: {error}"))?;
         let _ = session.SetIsCursorCaptureEnabled(false);
-        if let Err(error) = session.SetIsBorderRequired(false) {
-            log::debug!("Borderless capture unavailable: {error}");
+        let borderless = borderless_allowed();
+        if border_access_required() {
+            return Err("Borderless screen capture access is unavailable".to_string());
+        }
+        if borderless {
+            hide_border(&session);
         }
         let _ = session.SetDirtyRegionMode(GraphicsCaptureDirtyRegionMode::ReportOnly);
         set_rate(&session, rate_hz);
@@ -364,6 +386,7 @@ impl Session {
             session,
             token,
             rate_hz: Cell::new(rate_hz),
+            borderless: Cell::new(borderless),
         })
     }
 }
@@ -649,3 +672,64 @@ unsafe impl Sync for AgileDevice {}
 unsafe impl Send for AgileContext {}
 // SAFETY: See the Send implementation.
 unsafe impl Sync for AgileContext {}
+
+fn borderless_allowed() -> bool {
+    if !borderless_api_supported() {
+        BORDER_ACCESS.store(BORDER_REQUIRED, Ordering::Release);
+        return false;
+    }
+    if BORDER_ACCESS
+        .compare_exchange(
+            BORDER_UNKNOWN,
+            BORDER_PENDING,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        )
+        .is_ok()
+    {
+        let requested =
+            GraphicsCaptureAccess::RequestAccessAsync(GraphicsCaptureAccessKind::Borderless)
+                .and_then(|operation| {
+                    operation.when(|status| {
+                        let allowed = status
+                            .as_ref()
+                            .is_ok_and(|status| *status == AppCapabilityAccessStatus::Allowed);
+                        if !allowed {
+                            log::info!("Borderless screen capture is not allowed: {status:?}");
+                        }
+                        BORDER_ACCESS.store(
+                            if allowed {
+                                BORDER_OPTIONAL
+                            } else {
+                                BORDER_REQUIRED
+                            },
+                            Ordering::Release,
+                        );
+                        crate::window::wake();
+                    })
+                });
+        if let Err(error) = requested {
+            log::info!("Borderless screen capture is unavailable: {error}");
+            BORDER_ACCESS.store(BORDER_REQUIRED, Ordering::Release);
+        }
+    }
+    BORDER_ACCESS.load(Ordering::Acquire) == BORDER_OPTIONAL
+}
+
+fn border_access_required() -> bool {
+    BORDER_ACCESS.load(Ordering::Acquire) == BORDER_REQUIRED
+}
+
+fn borderless_api_supported() -> bool {
+    ApiInformation::IsPropertyPresent(
+        &HSTRING::from("Windows.Graphics.Capture.GraphicsCaptureSession"),
+        &HSTRING::from("IsBorderRequired"),
+    )
+    .unwrap_or(false)
+}
+
+fn hide_border(session: &GraphicsCaptureSession) {
+    if let Err(error) = session.SetIsBorderRequired(false) {
+        log::warn!("Screen capture border could not be hidden: {error}");
+    }
+}

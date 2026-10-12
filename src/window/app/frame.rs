@@ -1085,7 +1085,8 @@ impl App {
         } else {
             None
         };
-        let transition_active = self.springs.any_animating()
+        let transition_active = self.recorder.is_some()
+            || self.springs.any_animating()
             || self.pager_hover_animating()
             || self.compact_overlay.is_timer_finished_animating()
             || (compact_timer.is_some() && crate::ui::compact::timer::countdown_is_animating())
