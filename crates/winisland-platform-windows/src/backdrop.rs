@@ -1,14 +1,16 @@
-use std::cell::{OnceCell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::sync::Arc;
 
+mod blur;
 mod geometry;
+use blur::BackdropBlur;
 use geometry::PathVisual;
 
 use windows::{
     System::DispatcherQueueController,
     UI::Composition::Desktop::DesktopWindowTarget,
     UI::Composition::{
-        CompositionBackdropBrush, CompositionGeometricClip, CompositionRoundedRectangleGeometry,
+        CompositionBrush, CompositionGeometricClip, CompositionRoundedRectangleGeometry,
         Compositor, ContainerVisual, SpriteVisual,
     },
     Win32::{
@@ -56,6 +58,10 @@ pub(crate) struct HostBackdrop {
     path: PathVisual,
     extras: [ClippedVisual; 2],
     last_geometry: RefCell<Option<BackdropGeometry>>,
+    compositor: Compositor,
+    backdrop_brush: CompositionBrush,
+    blur: OnceCell<Option<BackdropBlur>>,
+    blur_amount: Cell<f32>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -90,7 +96,7 @@ fn quantize(value: f32) -> f32 {
 impl ClippedVisual {
     fn new(
         compositor: &Compositor,
-        brush: &CompositionBackdropBrush,
+        brush: &CompositionBrush,
         root: &ContainerVisual,
     ) -> Result<Self, String> {
         let visual = compositor
@@ -165,8 +171,9 @@ impl HostBackdrop {
         let root = compositor
             .CreateContainerVisual()
             .map_err(|error| format!("CreateContainerVisual failed: {error}"))?;
-        let brush = compositor
+        let brush: CompositionBrush = compositor
             .CreateHostBackdropBrush()
+            .and_then(|brush| brush.cast())
             .map_err(|error| format!("CreateHostBackdropBrush failed: {error}"))?;
         let primary = ClippedVisual::new(&compositor, &brush, &root)?;
         let path = PathVisual::new(&compositor, &brush, &root)
@@ -188,10 +195,50 @@ impl HostBackdrop {
             path,
             extras,
             last_geometry: RefCell::new(None),
+            compositor,
+            backdrop_brush: brush,
+            blur: OnceCell::new(),
+            blur_amount: Cell::new(0.0),
         })
     }
 
+    fn set_blur(&self, amount: f32) -> windows::core::Result<()> {
+        let amount = quantize(amount.max(0.0));
+        let previous = self.blur_amount.get();
+        if amount == previous {
+            return Ok(());
+        }
+        let blur = if amount > 0.0 {
+            self.blur
+                .get_or_init(|| {
+                    BackdropBlur::new(&self.compositor, &self.backdrop_brush)
+                        .map_err(|error| log::warn!("Host backdrop blur unavailable: {error}"))
+                        .ok()
+                })
+                .as_ref()
+        } else {
+            None
+        };
+        if let Some(blur) = blur {
+            blur.set_amount(amount)?;
+        }
+        if (previous > 0.0) != (amount > 0.0) {
+            let brush = match blur {
+                Some(blur) => blur.brush()?,
+                None => self.backdrop_brush.clone(),
+            };
+            self.primary.visual.SetBrush(&brush)?;
+            self.path.set_brush(&brush)?;
+            for extra in &self.extras {
+                extra.visual.SetBrush(&brush)?;
+            }
+        }
+        self.blur_amount.set(amount);
+        Ok(())
+    }
+
     pub(crate) fn update(&self, params: HostBackdropParams) -> windows::core::Result<()> {
+        self.set_blur(params.blur)?;
         let primary = (params.enabled && params.width > 0.0 && params.height > 0.0).then_some(
             BackdropShape {
                 screen_x: params.screen_x,

@@ -11,9 +11,10 @@ use std::sync::Arc;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Input::Touch::{RegisterTouchWindow, TWF_WANTPALM};
 use winisland_platform::{
-    AppHandler, CursorKind, DisplayProvider, HitRegion, HostBackdropParams, MonitorId, MonitorInfo,
-    NativeSurface, OverlaySpec, OverlayStyles, PlatformError, SettingsSpec, Theme, WindowId,
-    WindowPosition, WindowSize, WindowSystem,
+    AppHandler, BackdropCaptureFrame, BackdropCaptureRequest, CursorKind, DisplayProvider,
+    HitRegion, HostBackdropParams, MonitorId, MonitorInfo, NativeSurface, OverlaySpec,
+    OverlayStyles, PlatformError, SettingsSpec, Theme, WindowId, WindowPosition, WindowSize,
+    WindowSystem,
 };
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event_loop::ActiveEventLoop;
@@ -23,6 +24,7 @@ use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{CursorIcon, Theme as WinitTheme, Window, WindowAttributes};
 
 use crate::backdrop::HostBackdrop;
+use crate::capture::BackdropCapture;
 use crate::display::WindowsDisplay;
 
 pub use r#loop::wake;
@@ -34,6 +36,7 @@ struct WindowRecord {
     plugin_keyboard: bool,
     host_backdrop: Option<Rc<HostBackdrop>>,
     input: Option<Rc<hit_test::InputWindow>>,
+    backdrop_capture: Option<Rc<BackdropCapture>>,
     window: Arc<Window>,
     backdrop: Option<Arc<Window>>,
 }
@@ -91,6 +94,7 @@ fn register_window(
         plugin_keyboard: false,
         host_backdrop: None,
         input,
+        backdrop_capture: None,
         window,
         backdrop,
     };
@@ -649,5 +653,54 @@ impl WindowSystem for WindowsWindowSystem {
                 .and_then(|record| record.host_backdrop.take())
         });
         drop(host_backdrop);
+    }
+
+    fn start_backdrop_capture(&self, id: WindowId, adapter_luid: u64) -> Result<(), PlatformError> {
+        let window = get_window(id).ok_or(PlatformError::Unavailable("overlay window"))?;
+        let hwnd = window_hwnd(&window).ok_or(PlatformError::Unavailable("overlay handle"))?;
+        let capture = Rc::new(
+            BackdropCapture::new(HWND(hwnd as *mut _), adapter_luid)
+                .map_err(PlatformError::Backend)?,
+        );
+        WINDOWS.with(|windows| {
+            if let Some(record) = windows.borrow_mut().get_mut(&id) {
+                record.backdrop_capture = Some(capture);
+            }
+        });
+        Ok(())
+    }
+
+    fn update_backdrop_capture(
+        &self,
+        id: WindowId,
+        request: BackdropCaptureRequest,
+    ) -> Option<BackdropCaptureFrame> {
+        let capture = WINDOWS.with(|windows| {
+            windows
+                .borrow()
+                .get(&id)
+                .and_then(|record| record.backdrop_capture.clone())
+        })?;
+        capture.update(request)
+    }
+
+    fn backdrop_capture_pending(&self, id: WindowId) -> bool {
+        WINDOWS.with(|windows| {
+            windows
+                .borrow()
+                .get(&id)
+                .and_then(|record| record.backdrop_capture.as_ref())
+                .is_some_and(|capture| capture.pending())
+        })
+    }
+
+    fn stop_backdrop_capture(&self, id: WindowId) {
+        let capture = WINDOWS.with(|windows| {
+            windows
+                .borrow_mut()
+                .get_mut(&id)
+                .and_then(|record| record.backdrop_capture.take())
+        });
+        drop(capture);
     }
 }

@@ -292,7 +292,7 @@ fn draw_island_background_path(
     painter.fill_path(&shadow_path, Rgba::from_argb(72, 0, 0, 0));
 
     let island_path = Path::continuous_rounded_rect(rect, corner_radius);
-    if island_style == "glass" {
+    if matches!(island_style, "glass" | "liquid") {
         painter.fill_path(&island_path, Rgba::from_argb(220, 24, 24, 28));
     } else if island_style == "dynamic" {
         let stops = [
@@ -322,7 +322,11 @@ fn draw_island_background_path(
     painter.stroke_path(
         &island_path,
         1.0,
-        settings_color(theme.text_pri).with_alpha(if island_style == "glass" { 52 } else { 38 }),
+        settings_color(theme.text_pri).with_alpha(if matches!(island_style, "glass" | "liquid") {
+            52
+        } else {
+            38
+        }),
         StrokeCap::Butt,
         StrokeJoin::Miter,
     );

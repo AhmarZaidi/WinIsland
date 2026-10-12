@@ -51,6 +51,22 @@ pub struct AppConfig {
     pub motion_blur: bool,
     #[educe(Default = "default")]
     pub island_style: String,
+    #[educe(Default = 6.0)]
+    #[setting(number(min = 0.0, max = 30.0, step = 1.0))]
+    pub liquid_glass_blur: f32,
+    #[educe(Default = 200.0)]
+    #[setting(number(min = 0.0, max = 400.0, step = 10.0))]
+    pub liquid_glass_refraction: f32,
+    #[educe(Default = 40.0)]
+    #[setting(number(min = 0.0, max = 100.0, step = 5.0))]
+    pub liquid_glass_dispersion: f32,
+    #[educe(Default = 100.0)]
+    #[setting(number(min = 0.0, max = 200.0, step = 10.0))]
+    pub liquid_glass_tint: f32,
+    #[setting(toggle)]
+    pub liquid_glass_siri: bool,
+    #[setting(number(min = 0.0, max = 50.0, step = 1.0))]
+    pub glass_blur: f32,
     #[educe(Default = true)]
     #[setting(toggle, label = "smtc_control")]
     pub smtc_enabled: bool,

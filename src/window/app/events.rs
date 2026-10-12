@@ -392,6 +392,9 @@ impl App {
                                     surface_bounds.top,
                                 ))
                             });
+                        let liquid_scale = self.config.compact_scale
+                            + (self.config.expanded_scale - self.config.compact_scale)
+                                * progress.clamp(0.0, 1.0);
                         let host_backdrop = super::system::update_host_backdrop(
                             &mut self.host_backdrop,
                             win.id(),
@@ -406,107 +409,155 @@ impl App {
                                 height: surface_bounds.height(),
                                 radius: self.springs.r.value,
                                 outline,
-                                extras: pager_backdrop,
+                                extras: if self.config.island_style == "liquid" {
+                                    [None, None]
+                                } else {
+                                    pager_backdrop
+                                },
+                                blur: if self.config.island_style == "glass" {
+                                    self.config.glass_blur * liquid_scale
+                                } else {
+                                    0.0
+                                },
+                            },
+                        );
+                        let (win_x, win_y) = (self.geom.win_x as f32, self.geom.win_y as f32);
+                        let liquid_interest = pager_backdrop.iter().flatten().fold(
+                            surface_bounds,
+                            |bounds, shape| {
+                                winisland_render::Rect::from_ltrb(
+                                    bounds.left.min(shape.screen_x - win_x),
+                                    bounds.top.min(shape.screen_y - win_y),
+                                    bounds.right.max(shape.screen_x - win_x + shape.width),
+                                    bounds.bottom.max(shape.screen_y - win_y + shape.height),
+                                )
+                            },
+                        );
+                        super::system::update_backdrop_capture(
+                            &mut self.backdrop_capture,
+                            &mut renderer,
+                            super::system::BackdropCaptureInput {
+                                window: self.window,
+                                origin: (self.geom.win_x, self.geom.win_y),
+                                frame_interval: self.display_frame_interval,
+                                interest: liquid_interest,
+                                frost_sigma: self.config.liquid_glass_blur * liquid_scale,
+                                active: !compact_components_hidden
+                                    && self.config.island_style == "liquid",
+                                animating: self.springs.any_animating(),
                             },
                         );
                         let main_target = renderer.main_target();
-                        let render_result = renderer.frame(main_target, |_, painter| {
-                            draw_island(
-                                painter,
-                                crate::ui::island::DrawIslandParams {
-                                    layout: crate::ui::island::LayoutParams {
-                                        pager_above: island_layout.dock_bottom,
-                                        pager_bar_hover: self.bar_hover.value,
-                                        pager_close_hover: self.close_hover.value,
-                                        current_w: self.springs.w.value,
-                                        current_h: self.springs.h.value,
-                                        current_r: self.springs.r.value,
-                                        sigmas,
-                                        shadow_static: !self.springs.any_animating(),
-                                        expansion_progress: progress,
-                                        view_offset: self.springs.view.value,
-                                        compact_scale: self.config.compact_scale,
-                                        expanded_scale: self.config.expanded_scale,
-                                        hide_progress: self.springs.hide.value
-                                            * island_layout.content_hide_ratio,
-                                        compact_widget_opacity: if compact_components_hidden {
-                                            0.0
-                                        } else {
-                                            crate::ui::widget::compact::hide_opacity(
-                                                self.springs.hide.value,
-                                            )
+                        let render_result =
+                            renderer.frame(main_target, |drawing_context, painter| {
+                                draw_island(
+                                    painter,
+                                    crate::ui::island::DrawIslandParams {
+                                        layout: crate::ui::island::LayoutParams {
+                                            pager_above: island_layout.dock_bottom,
+                                            pager_bar_hover: self.bar_hover.value,
+                                            pager_close_hover: self.close_hover.value,
+                                            current_w: self.springs.w.value,
+                                            current_h: self.springs.h.value,
+                                            current_r: self.springs.r.value,
+                                            sigmas,
+                                            shadow_static: !self.springs.any_animating(),
+                                            expansion_progress: progress,
+                                            view_offset: self.springs.view.value,
+                                            compact_scale: self.config.compact_scale,
+                                            expanded_scale: self.config.expanded_scale,
+                                            hide_progress: self.springs.hide.value
+                                                * island_layout.content_hide_ratio,
+                                            compact_widget_opacity: if compact_components_hidden {
+                                                0.0
+                                            } else {
+                                                crate::ui::widget::compact::hide_opacity(
+                                                    self.springs.hide.value,
+                                                )
+                                            },
+                                            island_x: island_layout.current_island_x as f32,
+                                            island_y: island_layout.current_island_y as f32,
+                                            stable_island_y: island_layout.stable_island_y as f32,
+                                            base_h: compact_content_h,
                                         },
-                                        island_x: island_layout.current_island_x as f32,
-                                        island_y: island_layout.current_island_y as f32,
-                                        stable_island_y: island_layout.stable_island_y as f32,
-                                        base_h: compact_content_h,
+                                        media: crate::ui::island::MediaParams {
+                                            media: if compact_components_hidden {
+                                                &default_media_info
+                                            } else {
+                                                media_info
+                                            },
+                                            music_active: music_active
+                                                && !compact_components_hidden,
+                                            available_controls,
+                                        },
+                                        lyrics: crate::ui::island::LyricsParams {
+                                            current_lyric: &self.lyrics.current_text,
+                                            current_secondary_lyric,
+                                            old_lyric: &self.lyrics.old_text,
+                                            old_secondary_lyric,
+                                            lyric_highlight: self.lyrics.highlight,
+                                            lyric_transition: self.lyrics.transition,
+                                            lyric_transition_animation: self
+                                                .lyrics
+                                                .transition_animation,
+                                            lyric_scroll_offset: self.lyrics.scroll_offset,
+                                            lyric_side_gap: self.config.lyrics_side_gap,
+                                        },
+                                        style: crate::ui::island::StyleParams {
+                                            island_style: if compact_components_hidden {
+                                                "solid"
+                                            } else {
+                                                &self.config.island_style
+                                            },
+                                            host_backdrop,
+                                            liquid_backdrop: (self.config.island_style == "liquid")
+                                                .then(|| drawing_context.backdrop())
+                                                .flatten(),
+                                            liquid_optics: crate::ui::island::LiquidOptics {
+                                                refraction: self.config.liquid_glass_refraction
+                                                    / 100.0,
+                                                dispersion: self.config.liquid_glass_dispersion
+                                                    / 100.0,
+                                                tint: self.config.liquid_glass_tint / 100.0,
+                                            },
+                                            liquid_siri: self.config.liquid_glass_siri,
+                                            use_blur: self.config.motion_blur,
+                                            font_size: self.config.font_size,
+                                            music_text_y_offset: self.config.music_text_y_offset,
+                                            music_text_line_spacing: self
+                                                .config
+                                                .music_text_line_spacing,
+                                            dt,
+                                            expanded_width: self.config.expanded_width,
+                                            expanded_height: self.config.expanded_height,
+                                            widget_layout: if compact_components_hidden {
+                                                &[]
+                                            } else {
+                                                &self.config.widget_layout
+                                            },
+                                            plugin_widget_layout: if compact_components_hidden {
+                                                &[]
+                                            } else {
+                                                &self.config.plugin_widget_layout
+                                            },
+                                            plugin_widgets: &self.widget_mgr,
+                                            plugin_frames: &self.plugin_frames,
+                                            plugin_host: self.plugin_host.as_deref(),
+                                            compact_widget_layout: if compact_components_hidden {
+                                                &[]
+                                            } else {
+                                                &self.config.compact_widget_layout
+                                            },
+                                            pages: &expanded_pages,
+                                        },
+                                        mini_content,
+                                        compact_overlay: &self.compact_overlay,
+                                        attention_alpha,
+                                        surface: &surface,
+                                        secondary_task,
                                     },
-                                    media: crate::ui::island::MediaParams {
-                                        media: if compact_components_hidden {
-                                            &default_media_info
-                                        } else {
-                                            media_info
-                                        },
-                                        music_active: music_active && !compact_components_hidden,
-                                        available_controls,
-                                    },
-                                    lyrics: crate::ui::island::LyricsParams {
-                                        current_lyric: &self.lyrics.current_text,
-                                        current_secondary_lyric,
-                                        old_lyric: &self.lyrics.old_text,
-                                        old_secondary_lyric,
-                                        lyric_highlight: self.lyrics.highlight,
-                                        lyric_transition: self.lyrics.transition,
-                                        lyric_transition_animation: self
-                                            .lyrics
-                                            .transition_animation,
-                                        lyric_scroll_offset: self.lyrics.scroll_offset,
-                                        lyric_side_gap: self.config.lyrics_side_gap,
-                                    },
-                                    style: crate::ui::island::StyleParams {
-                                        island_style: if compact_components_hidden {
-                                            "solid"
-                                        } else {
-                                            &self.config.island_style
-                                        },
-                                        host_backdrop,
-                                        use_blur: self.config.motion_blur,
-                                        font_size: self.config.font_size,
-                                        music_text_y_offset: self.config.music_text_y_offset,
-                                        music_text_line_spacing: self
-                                            .config
-                                            .music_text_line_spacing,
-                                        dt,
-                                        expanded_width: self.config.expanded_width,
-                                        expanded_height: self.config.expanded_height,
-                                        widget_layout: if compact_components_hidden {
-                                            &[]
-                                        } else {
-                                            &self.config.widget_layout
-                                        },
-                                        plugin_widget_layout: if compact_components_hidden {
-                                            &[]
-                                        } else {
-                                            &self.config.plugin_widget_layout
-                                        },
-                                        plugin_widgets: &self.widget_mgr,
-                                        plugin_frames: &self.plugin_frames,
-                                        plugin_host: self.plugin_host.as_deref(),
-                                        compact_widget_layout: if compact_components_hidden {
-                                            &[]
-                                        } else {
-                                            &self.config.compact_widget_layout
-                                        },
-                                        pages: &expanded_pages,
-                                    },
-                                    mini_content,
-                                    compact_overlay: &self.compact_overlay,
-                                    attention_alpha,
-                                    surface: &surface,
-                                    secondary_task,
-                                },
-                            )
-                        });
+                                )
+                            });
                         self.renderer = Some(renderer);
                         if let Err(error) = render_result {
                             self.invalidate_renderer(&error.to_string(), Instant::now());
@@ -639,6 +690,7 @@ impl AppHandler for App {
         }
         self.close_settings();
         self.close_guide();
+        self.stop_backdrop_capture();
         if let Some(window_ref) = self.window.take() {
             window().release_host_backdrop(window_ref.id());
             self.host_backdrop = false;

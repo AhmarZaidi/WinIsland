@@ -5328,6 +5328,7 @@ dependencies = [
  "tray-icon",
  "wasapi",
  "windows",
+ "windows-collections",
  "windows-core",
  "windows-numerics",
  "windows-registry",

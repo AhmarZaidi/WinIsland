@@ -1,6 +1,6 @@
 use windows::Graphics::{IGeometrySource2D, IGeometrySource2D_Impl};
 use windows::UI::Composition::{
-    CompositionBackdropBrush, CompositionGeometricClip, CompositionPath, CompositionPathGeometry,
+    CompositionBrush, CompositionGeometricClip, CompositionPath, CompositionPathGeometry,
     Compositor, ContainerVisual, SpriteVisual,
 };
 use windows::Win32::Graphics::Direct2D::Common::{
@@ -29,7 +29,7 @@ pub(super) struct PathVisual {
 impl PathVisual {
     pub(super) fn new(
         compositor: &Compositor,
-        brush: &CompositionBackdropBrush,
+        brush: &CompositionBrush,
         root: &ContainerVisual,
     ) -> Result<Self> {
         let visual = compositor.CreateSpriteVisual()?;
@@ -106,6 +106,10 @@ impl PathVisual {
 
     pub(super) fn hide(&self) -> Result<()> {
         self.visual.SetIsVisible(false)
+    }
+
+    pub(super) fn set_brush(&self, brush: &CompositionBrush) -> Result<()> {
+        self.visual.SetBrush(brush)
     }
 }
 

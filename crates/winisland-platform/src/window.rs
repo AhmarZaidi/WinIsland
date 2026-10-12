@@ -2,8 +2,9 @@ use std::any::Any;
 use std::sync::Arc;
 
 use crate::{
-    AppHandler, CursorKind, HitRegion, HostBackdropParams, MonitorId, MonitorInfo, OverlaySpec,
-    OverlayStyles, PlatformError, SettingsSpec, Theme, WindowId, WindowPosition, WindowSize,
+    AppHandler, BackdropCaptureFrame, BackdropCaptureRequest, CursorKind, HitRegion,
+    HostBackdropParams, MonitorId, MonitorInfo, OverlaySpec, OverlayStyles, PlatformError,
+    SettingsSpec, Theme, WindowId, WindowPosition, WindowSize,
 };
 
 /// Surface tag for a native Win32 window handle.
@@ -123,4 +124,19 @@ pub trait WindowSystem {
     fn hide_host_backdrop(&self, id: WindowId);
     /// Releases backdrop resources before renderer drop; repeated release is harmless.
     fn release_host_backdrop(&self, id: WindowId);
+    /// Starts screen sampling beneath an overlay on the adapter with `adapter_luid`, excluding the
+    /// overlay from all screen captures until stopped; unavailable support returns an error.
+    fn start_backdrop_capture(&self, id: WindowId, adapter_luid: u64) -> Result<(), PlatformError>;
+    /// Copies the newest screen content into the shared texture; `None` means no capture is
+    /// running or no frame has arrived yet.
+    fn update_backdrop_capture(
+        &self,
+        id: WindowId,
+        request: BackdropCaptureRequest,
+    ) -> Option<BackdropCaptureFrame>;
+    /// Reports whether screen content inside the last interest rectangle changed since the
+    /// previous update.
+    fn backdrop_capture_pending(&self, id: WindowId) -> bool;
+    /// Stops sampling and restores capture visibility; repeated stops are harmless.
+    fn stop_backdrop_capture(&self, id: WindowId);
 }
