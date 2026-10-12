@@ -1,5 +1,13 @@
 # Changelog
 
+### v1.5.0
+- Added a Liquid Glass island style with refraction, dispersion, and edge highlights, with adjustable background blur, refraction, dispersion, and dark tint; while it is on, the island does not appear in screenshots or screen recordings
+- Added an experimental Siri AI style for Liquid Glass with a black-to-glass gradient
+- Added a blur strength setting for the Frosted Glass style
+- Changed spectrum colors to stay closer to the album cover
+- Fixed the compact resource ring overflowing its slot
+- Fixed a possible crash when matching lyrics for titles that mix Latin and CJK characters
+
 ### v1.4.2
 - Fixed resource widget GPU usage so it matches Task Manager
 - Added separate usage for each GPU (GPU 0, GPU 1, and so on) on systems with more than one GPU
