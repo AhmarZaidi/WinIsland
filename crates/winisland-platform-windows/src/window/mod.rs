@@ -23,7 +23,7 @@ use winit::platform::windows::{MonitorHandleExtWindows, WindowExtWindows};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{CursorIcon, Theme as WinitTheme, Window, WindowAttributes};
 
-use crate::backdrop::HostBackdrop;
+use crate::backdrop::{HostBackdrop, WindowBackdrop};
 use crate::capture::BackdropCapture;
 use crate::display::WindowsDisplay;
 
@@ -35,6 +35,7 @@ struct WindowRecord {
     plugin_capture: bool,
     plugin_keyboard: bool,
     host_backdrop: Option<Rc<HostBackdrop>>,
+    window_backdrop: Option<Rc<WindowBackdrop>>,
     input: Option<Rc<hit_test::InputWindow>>,
     backdrop_capture: Option<Rc<BackdropCapture>>,
     window: Arc<Window>,
@@ -93,6 +94,7 @@ fn register_window(
         plugin_capture: false,
         plugin_keyboard: false,
         host_backdrop: None,
+        window_backdrop: None,
         input,
         backdrop_capture: None,
         window,
@@ -653,6 +655,42 @@ impl WindowSystem for WindowsWindowSystem {
                 .and_then(|record| record.host_backdrop.take())
         });
         drop(host_backdrop);
+    }
+
+    fn start_window_backdrop(&self, id: WindowId) -> Result<(), PlatformError> {
+        let window = get_window(id).ok_or(PlatformError::Unavailable("settings window"))?;
+        let window_backdrop =
+            Rc::new(WindowBackdrop::new(&window).map_err(PlatformError::Backend)?);
+        WINDOWS.with(|windows| {
+            if let Some(record) = windows.borrow_mut().get_mut(&id) {
+                record.window_backdrop = Some(window_backdrop);
+            }
+        });
+        Ok(())
+    }
+
+    fn update_window_backdrop(&self, id: WindowId, width: f32, height: f32, radius: f32) -> bool {
+        let window_backdrop = WINDOWS.with(|windows| {
+            windows
+                .borrow()
+                .get(&id)
+                .and_then(|record| record.window_backdrop.clone())
+        });
+        let Some(window_backdrop) = window_backdrop else {
+            return false;
+        };
+        if let Err(error) = window_backdrop.update(width, height, radius) {
+            log::warn!("Window backdrop update failed: {error}");
+            let released = WINDOWS.with(|windows| {
+                windows
+                    .borrow_mut()
+                    .get_mut(&id)
+                    .and_then(|record| record.window_backdrop.take())
+            });
+            drop(released);
+            return false;
+        }
+        true
     }
 
     fn start_backdrop_capture(&self, id: WindowId, adapter_luid: u64) -> Result<(), PlatformError> {

@@ -25,6 +25,9 @@ const SIDEBAR_ICON_BYTES: [&[u8]; 5] = [
     include_bytes!("../../../resources/in_app/settings/about.png"),
 ];
 
+const SIDEBAR_BLUR_TINT_LIGHT: f32 = 0.8;
+const SIDEBAR_BLUR_TINT_DARK: f32 = 0.72;
+
 thread_local! {
     static SIDEBAR_ICONS: RefCell<Option<[Image; 5]>> = const { RefCell::new(None) };
     static PLUGIN_SETTINGS_ICONS: RefCell<HashMap<u64, Image>> = RefCell::new(HashMap::new());
@@ -191,9 +194,18 @@ impl SettingsApp {
         theme: &SettingsTheme,
     ) {
         let logical_height = self.logical_window_size().1;
+        let sidebar_bg = settings_color(theme.sidebar_bg);
         painter.fill_rect(
             winisland_render::Rect::from_xywh(0.0, 0.0, SIDEBAR_W, logical_height),
-            settings_color(theme.sidebar_bg),
+            if self.window_backdrop {
+                sidebar_bg.with_alpha_f(if self.is_light {
+                    SIDEBAR_BLUR_TINT_LIGHT
+                } else {
+                    SIDEBAR_BLUR_TINT_DARK
+                })
+            } else {
+                sidebar_bg
+            },
         );
 
         let inactive_fill = if self.is_light {
