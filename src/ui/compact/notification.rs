@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{LazyCell, RefCell};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -17,6 +17,13 @@ const DISPLAY_DURATION: Duration = Duration::from_secs(5);
 const ENTER_DURATION: Duration = Duration::from_millis(220);
 const FADE_DURATION: Duration = Duration::from_millis(280);
 const DETAIL_LINE_GAP: f32 = 21.0;
+const DEFAULT_ICON_ASPECT: f32 = 944.0 / 1053.0;
+
+thread_local! {
+    static DEFAULT_ICON: LazyCell<Option<Image>> = LazyCell::new(|| {
+        crate::icons::load_glyph(include_bytes!("../../../resources/in_app/icons/bell.fill.png"))
+    });
+}
 
 struct NotificationIcon {
     image: Image,
@@ -200,20 +207,16 @@ impl NotificationIndicator {
         painter.save();
         painter.translate(Vec2::new(0.0, offset_y * scale));
 
-        let has_icon = self.icon.is_some();
-        let content_left = if has_icon {
-            rect.left + 72.0 * scale
-        } else {
-            rect.left + 20.0 * scale
-        };
+        let content_left = rect.left + 72.0 * scale;
         let content_width = rect.right - 18.0 * scale - content_left;
         if content_width <= 0.0 {
             painter.restore();
             return;
         }
 
-        if let Some(icon) = &self.icon {
-            draw_notification_icon(painter, icon, rect, scale, alpha);
+        match &self.icon {
+            Some(icon) => draw_notification_icon(painter, icon, rect, scale, alpha),
+            None => draw_default_icon(painter, rect, scale, alpha),
         }
 
         let top = rect.top;
@@ -395,4 +398,37 @@ fn draw_notification_icon(
             .with_alpha(alpha),
     );
     painter.restore();
+}
+
+fn draw_default_icon(painter: Painter<'_>, rect: Rect, scale: f32, alpha: u8) {
+    let size = 42.0 * scale;
+    let tile = Rect::from_xywh(
+        rect.left + 18.0 * scale,
+        rect.center_y() - size / 2.0,
+        size,
+        size,
+    );
+    painter.fill_round_rect(
+        tile,
+        Radius::uniform(11.0 * scale),
+        Rgba::from_rgb(72, 72, 76).with_alpha(alpha),
+    );
+    DEFAULT_ICON.with(|icon| {
+        if let Some(icon) = icon.as_ref() {
+            let height = 22.0 * scale;
+            let width = height * DEFAULT_ICON_ASPECT;
+            painter.draw_image(
+                icon,
+                Rect::from_xywh(
+                    tile.center_x() - width / 2.0,
+                    tile.center_y() - height / 2.0,
+                    width,
+                    height,
+                ),
+                &ImageOptions::default()
+                    .with_sampling(Sampling::LinearLinear)
+                    .with_alpha(alpha),
+            );
+        }
+    });
 }
