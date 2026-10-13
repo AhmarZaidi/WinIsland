@@ -1,5 +1,4 @@
 uniform shader backdrop;
-uniform shader sharp;
 
 uniform float4 shape0;
 uniform float2 corner0;
@@ -26,10 +25,14 @@ uniform float4 shadow;
 uniform float shadowAlpha;
 uniform float opacity;
 uniform float blackFade;
+uniform float rimReach;
 
 const float kEpsilon = 0.0001;
 const float kUnionDepth = 0.25;
 const float kMaxSlope = 11.430052;
+const float kEdgeOffset = 0.7;
+const float kEdgeSoftness = 0.6;
+const float kEdgeReach = 1.0;
 
 float roundRect(float2 p, float4 s, float2 c, out float2 g) {
     float2 sgn = float2(p.x < s.x ? -1.0 : 1.0, p.y < s.y ? -1.0 : 1.0);
@@ -70,11 +73,6 @@ float3 background(float2 c) {
     return float3(backdrop.eval(c).rgb);
 }
 
-float3 behind(float2 c, float clarity) {
-    float3 soft = background(c);
-    return clarity > 0.0 ? mix(soft, float3(sharp.eval(c).rgb), clarity) : soft;
-}
-
 float underlay(float2 p, float d, float2 g, float coverage) {
     float strokeA = 0.0;
     if (stroke.y > 0.0) {
@@ -92,18 +90,9 @@ float underlay(float2 p, float d, float2 g, float coverage) {
     return strokeA + shadowA * (1.0 - strokeA);
 }
 
-half4 main(float2 p) {
-    float t = clamp(progress, 0.0, 1.0);
-    if (t <= 0.0) {
-        return half4(0.0);
-    }
-    float pulse = 4.0 * t * (1.0 - t);
-    float coverage = smoothstep(0.0, 0.55, t);
-
-    float2 g;
-    float d = scene(p, g);
-    float fill = 1.0 - smoothstep(0.0, 1.4, d);
-    float under = underlay(p, d, g, coverage);
+half4 shade(float2 p, float d, float2 g, float t, float pulse, float coverage) {
+    float fill = 1.0 - smoothstep(kEdgeOffset - kEdgeSoftness, kEdgeOffset + kEdgeSoftness, d);
+    float under = fill < 1.0 ? underlay(p, d, g, coverage) : 0.0;
     if (fill <= 0.0) {
         return half4(0.0, 0.0, 0.0, half(under * opacity));
     }
@@ -123,16 +112,17 @@ half4 main(float2 p) {
         : float2(0.0);
     shift *= t + 7.0 * t * (1.0 - t);
 
-    float clarity = inward <= bezelWidth ? smoothstep(0.1, 0.75, u) : 0.0;
+    float spread = dispersion + morphDispersion * pulse;
     float3 glass;
     if (dot(shift, shift) < 0.0025) {
-        glass = behind(p, clarity);
+        glass = background(p);
+    } else if (spread < 0.001) {
+        glass = background(p + shift);
     } else {
-        float spread = dispersion + morphDispersion * pulse;
         glass = float3(
-            behind(p + shift * (1.0 + spread), clarity).r,
-            behind(p + shift, clarity).g,
-            behind(p + shift * (1.0 - spread), clarity).b);
+            background(p + shift * (1.0 + spread)).r,
+            background(p + shift).g,
+            background(p + shift * (1.0 - spread)).b);
     }
     float luma = dot(glass, float3(0.2126, 0.7152, 0.0722));
     float tintAmount = min(tint.a + legibility * smoothstep(0.35, 0.95, luma), 1.0);
@@ -144,12 +134,43 @@ half4 main(float2 p) {
     }
 
     float rim = 1.0 - smoothstep(0.0, max(specularShape.x, 0.25), abs(d));
-    float falloff = specular.w * band * band;
-    float lit = pow(max(dot(g, lightDir), 0.0), specularShape.y) * max(specular.x - falloff, 0.0);
-    float opposite = pow(max(dot(g, -lightDir), 0.0), specularShape.y) * max(specular.y - falloff, 0.0);
-    float sheen = clamp((lit + opposite) * rim, 0.0, 1.0) * specular.z * min(coverage + pulse * 0.85, 1.75);
+    if (rim > 0.0) {
+        float falloff = specular.w * band * band;
+        float lit = pow(max(dot(g, lightDir), 0.0), specularShape.y) * max(specular.x - falloff, 0.0);
+        float opposite = pow(max(dot(g, -lightDir), 0.0), specularShape.y) * max(specular.y - falloff, 0.0);
+        glass += clamp((lit + opposite) * rim, 0.0, 1.0) * specular.z * min(coverage + pulse * 0.85, 1.75);
+    }
 
-    float3 color = glass + sheen;
     float alpha = fill + under * (1.0 - fill);
-    return half4(half3(color * fill * opacity), half(alpha * opacity));
+    return half4(half3(glass * fill * opacity), half(alpha * opacity));
+}
+
+half4 main(float2 p) {
+    float t = clamp(progress, 0.0, 1.0);
+    if (t <= 0.0) {
+        return half4(0.0);
+    }
+    float pulse = 4.0 * t * (1.0 - t);
+    float coverage = smoothstep(0.0, 0.55, t);
+
+    float2 g;
+    float d = scene(p, g);
+    float outer = max(stroke.x + stroke.z, kEdgeOffset + kEdgeSoftness) + kEdgeReach;
+    bool edge = d >= -rimReach && d <= outer;
+    float samples = edge ? 4.0 : 1.0;
+    float2 offset = edge ? float2(0.125, 0.375) : float2(0.0);
+    half4 sum = half4(0.0);
+    for (int i = 0; i < 4; i++) {
+        if (float(i) >= samples) {
+            break;
+        }
+        float2 q = p + offset;
+        float dq = d;
+        if (edge) {
+            dq = scene(q, g);
+        }
+        sum += shade(q, dq, g, t, pulse, coverage);
+        offset = float2(-offset.y, offset.x);
+    }
+    return sum / half(samples);
 }
