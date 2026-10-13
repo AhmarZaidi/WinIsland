@@ -214,8 +214,23 @@ impl App {
         true
     }
 
+    fn island_monitor(&self, window: &WindowRef) -> Option<MonitorRef> {
+        let target = Self::get_target_monitor(window, self.config.monitor_index)?;
+        let (center_x, center_y) = self.collapsed_island_center(target.position(), target.size());
+        let (x, y) = (center_x.round() as i32, center_y.round() as i32);
+        crate::platform::window()
+            .monitors()
+            .into_iter()
+            .find(|monitor| {
+                let bounds = monitor.bounds;
+                (bounds.left..bounds.right).contains(&x) && (bounds.top..bounds.bottom).contains(&y)
+            })
+            .map(MonitorRef)
+            .or(Some(target))
+    }
+
     pub(super) fn snap_to_top_edge(&mut self, window: &WindowRef) {
-        let Some(monitor) = Self::get_target_monitor(window, self.config.monitor_index) else {
+        let Some(monitor) = self.island_monitor(window) else {
             return;
         };
         let mon_pos = monitor.position();
