@@ -185,6 +185,7 @@ pub(crate) enum MarketplaceViewState {
 pub struct SettingsApp {
     pub(crate) window: Option<WindowRef>,
     pub(crate) renderer_target: Option<RendererTargetId>,
+    pub(crate) window_backdrop: bool,
     pub(crate) config: AppConfig,
     pub(crate) active_page: usize,
     pub(crate) page_history: Vec<usize>,
@@ -320,6 +321,7 @@ impl SettingsApp {
         Self {
             window: None,
             renderer_target: None,
+            window_backdrop: false,
             config,
             active_page: GENERAL_PAGE_INDEX,
             page_history: vec![0],
@@ -536,6 +538,13 @@ impl SettingsApp {
             .expect("Settings window creation failed");
         let window_ref = WindowRef(id);
         self.window = Some(window_ref);
+        self.window_backdrop = match window().start_window_backdrop(id) {
+            Ok(()) => true,
+            Err(error) => {
+                log::info!("Settings sidebar blur unavailable: {error}");
+                false
+            }
+        };
         self.keep_window_on_island_monitor(true);
         let size = window_ref.inner_size();
         self.win_w = size.width as f32;

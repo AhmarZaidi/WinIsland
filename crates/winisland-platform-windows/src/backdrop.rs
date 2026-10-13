@@ -33,7 +33,9 @@ use winit::{
     window::Window,
 };
 
-use crate::window::styles::enable_host_backdrop;
+use crate::window::styles::{
+    enable_host_backdrop, enable_host_backdrop_brush, transparency_enabled,
+};
 
 const HOST_BACKDROP_INSET: f32 = 1.0;
 
@@ -364,6 +366,75 @@ impl HostBackdrop {
 impl Drop for HostBackdrop {
     fn drop(&mut self) {
         self.hide();
+        let _ = self.target.Close();
+    }
+}
+
+pub(crate) struct WindowBackdrop {
+    target: DesktopWindowTarget,
+    _root: ContainerVisual,
+    visual: ClippedVisual,
+    last_shape: Cell<Option<ShapeGeometry>>,
+}
+
+impl WindowBackdrop {
+    pub(crate) fn new(window: &Window) -> Result<Self, String> {
+        if !transparency_enabled() {
+            return Err("Windows transparency effects are disabled".to_string());
+        }
+        let compositor = backdrop_compositor()
+            .ok_or_else(|| "Windows host backdrop compositor is unavailable".to_string())?;
+        let hwnd = window_hwnd(window)?;
+        if !enable_host_backdrop_brush(hwnd) {
+            return Err("DWM host backdrop brush could not be enabled".to_string());
+        }
+        let interop: ICompositorDesktopInterop = compositor
+            .cast()
+            .map_err(|error| format!("ICompositorDesktopInterop is unavailable: {error}"))?;
+        let target = unsafe {
+            // SAFETY: hwnd is live and its swapchain uses the topmost target, leaving this slot free.
+            interop.CreateDesktopWindowTarget(hwnd, false)
+        }
+        .map_err(|error| format!("CreateDesktopWindowTarget failed: {error}"))?;
+        let root = compositor
+            .CreateContainerVisual()
+            .map_err(|error| format!("CreateContainerVisual failed: {error}"))?;
+        let brush: CompositionBrush = compositor
+            .CreateHostBackdropBrush()
+            .and_then(|brush| brush.cast())
+            .map_err(|error| format!("CreateHostBackdropBrush failed: {error}"))?;
+        let visual = ClippedVisual::new(&compositor, &brush, &root)?;
+        target
+            .SetRoot(&root)
+            .map_err(|error| format!("Window backdrop root assignment failed: {error}"))?;
+        Ok(Self {
+            target,
+            _root: root,
+            visual,
+            last_shape: Cell::new(None),
+        })
+    }
+
+    pub(crate) fn update(&self, width: f32, height: f32, radius: f32) -> windows::core::Result<()> {
+        let shape = (width > 0.0 && height > 0.0).then(|| ShapeGeometry {
+            x: 0.0,
+            y: 0.0,
+            width: quantize(width),
+            height: quantize(height),
+            radius: quantize(radius.max(0.0)),
+            opacity: 1.0,
+        });
+        if self.last_shape.get() == shape {
+            return Ok(());
+        }
+        self.visual.apply(shape)?;
+        self.last_shape.set(shape);
+        Ok(())
+    }
+}
+
+impl Drop for WindowBackdrop {
+    fn drop(&mut self) {
         let _ = self.target.Close();
     }
 }

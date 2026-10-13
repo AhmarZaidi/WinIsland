@@ -112,6 +112,17 @@ impl RollingTime {
         size: f32,
         color: Rgba,
     ) {
+        self.draw_with(painter, text, anchor, size, |_| color);
+    }
+
+    pub(crate) fn draw_with(
+        &mut self,
+        painter: Painter<'_>,
+        text: &str,
+        anchor: TimeAnchor,
+        size: f32,
+        color: impl Fn(usize) -> Rgba,
+    ) {
         let now = Instant::now();
         let dt = self
             .last_frame
@@ -145,7 +156,7 @@ impl RollingTime {
             total.max(self.width) * 2.0,
             size * 1.24,
         ));
-        let opacity = f32::from(color.a()) / 255.0;
+        let opacity = |color: Rgba| f32::from(color.a()) / 255.0;
         let eased = |change: DigitChange| {
             let t = (now.duration_since(change.started).as_secs_f32()
                 / DIGIT_DURATION.as_secs_f32())
@@ -158,6 +169,7 @@ impl RollingTime {
             let width = advance(change.previous);
             departing_x -= width;
             let amount = eased(*change);
+            let color = color(0);
             draw_widget_text_centered(
                 painter,
                 change.previous.encode_utf8(&mut buffer),
@@ -169,12 +181,13 @@ impl RollingTime {
                 ),
                 size,
                 true,
-                color.with_alpha_f(opacity * (1.0 - amount)),
+                color.with_alpha_f(opacity(color) * (1.0 - amount)),
             );
         }
         for (index, character) in chars.iter().enumerate() {
             let width = advance(*character);
             let cell = Rect::from_xywh(x, right.y - size / 2.0, width, size);
+            let color = color(index);
             if let Some(change) = self.changes[index] {
                 let amount = eased(change);
                 draw_widget_text_centered(
@@ -183,7 +196,7 @@ impl RollingTime {
                     cell.offset(Vec2::new(0.0, -travel * amount)),
                     size,
                     true,
-                    color.with_alpha_f(opacity * (1.0 - amount)),
+                    color.with_alpha_f(opacity(color) * (1.0 - amount)),
                 );
                 draw_widget_text_centered(
                     painter,
@@ -191,7 +204,7 @@ impl RollingTime {
                     cell.offset(Vec2::new(0.0, travel * (1.0 - amount))),
                     size,
                     true,
-                    color.with_alpha_f(opacity * amount),
+                    color.with_alpha_f(opacity(color) * amount),
                 );
             } else {
                 draw_widget_text_centered(

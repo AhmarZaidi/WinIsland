@@ -6,6 +6,7 @@ use windows::Win32::Graphics::Dwm::{
     DWMWA_USE_HOSTBACKDROPBRUSH, DWMWINDOWATTRIBUTE, DwmSetWindowAttribute,
 };
 use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
 use windows::Win32::UI::WindowsAndMessaging::{
     GWL_EXSTYLE, GWL_STYLE, GetWindowLongPtrW, HWND_NOTOPMOST, HWND_TOPMOST, SWP_FRAMECHANGED,
     SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetWindowLongPtrW, SetWindowPos,
@@ -47,11 +48,11 @@ fn set_window_composition_attribute() -> Option<SetWindowCompositionAttribute> {
     })
 }
 
-pub(crate) fn enable_host_backdrop(hwnd: HWND) -> bool {
+pub(crate) fn enable_host_backdrop_brush(hwnd: HWND) -> bool {
     let enabled: i32 = 1;
-    // SAFETY: hwnd belongs to the live backdrop window and enabled points to an initialized BOOL-
-    // compatible value for the duration of the synchronous DWM call.
-    if unsafe {
+    // SAFETY: hwnd belongs to a live window and enabled points to an initialized BOOL-compatible
+    // value for the duration of the synchronous DWM call.
+    unsafe {
         DwmSetWindowAttribute(
             hwnd,
             DWMWA_USE_HOSTBACKDROPBRUSH,
@@ -60,7 +61,29 @@ pub(crate) fn enable_host_backdrop(hwnd: HWND) -> bool {
         )
     }
     .is_ok()
-    {
+}
+
+pub(crate) fn transparency_enabled() -> bool {
+    let mut value = 1u32;
+    let mut size = size_of::<u32>() as u32;
+    // SAFETY: value and size point to initialized locals sized for the REG_DWORD requested by
+    // RRF_RT_REG_DWORD, and both outlive the synchronous registry read.
+    let result = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+            w!("EnableTransparency"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some((&mut value as *mut u32).cast()),
+            Some(&mut size),
+        )
+    };
+    result.is_err() || value != 0
+}
+
+pub(crate) fn enable_host_backdrop(hwnd: HWND) -> bool {
+    if enable_host_backdrop_brush(hwnd) {
         return true;
     }
 

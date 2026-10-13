@@ -220,6 +220,7 @@ timer_ends_at=Termina a las {}
 timer_done=Tiempo agotado
 timer_done_toast=Temporizador de {} terminado
 timer_scroll_hint=Desplaza para ajustar
+timer_fine_hint=Desplaza para ajuste fino
 clipboard_link_prompt=Preguntar al copiar enlaces
 link_prompt_title=¿Abrir el enlace copiado?
 link_prompt_open=Abrir

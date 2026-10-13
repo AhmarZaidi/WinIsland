@@ -124,6 +124,12 @@ pub trait WindowSystem {
     fn hide_host_backdrop(&self, id: WindowId);
     /// Releases backdrop resources before renderer drop; repeated release is harmless.
     fn release_host_backdrop(&self, id: WindowId);
+    /// Starts composition backdrop beneath a settings window's own content; disabled transparency
+    /// or unavailable support returns an error.
+    fn start_window_backdrop(&self, id: WindowId) -> Result<(), PlatformError>;
+    /// Shapes the window backdrop from the client origin in physical pixels; false means absent,
+    /// and an update error releases it.
+    fn update_window_backdrop(&self, id: WindowId, width: f32, height: f32, radius: f32) -> bool;
     /// Starts screen sampling beneath an overlay on the adapter with `adapter_luid`, excluding the
     /// overlay from all screen captures until stopped; unavailable support returns an error.
     fn start_backdrop_capture(&self, id: WindowId, adapter_luid: u64) -> Result<(), PlatformError>;

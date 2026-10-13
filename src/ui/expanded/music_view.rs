@@ -85,6 +85,7 @@ thread_local! {
     static ARTIST_SCROLL: RefCell<ScrollText> = RefCell::new(ScrollText::new());
     static COVER_FLIP_ANIM: RefCell<Option<std::time::Instant>> = const { RefCell::new(None) };
     static COVER_FLIP_OLD_IMG: RefCell<Option<Image>> = const { RefCell::new(None) };
+    static COVER_HOLD: RefCell<bool> = const { RefCell::new(false) };
     static PROGRESS_HOVER: RefCell<(bool, f32)> = const { RefCell::new((false, 0.0)) };
     static PROGRESS_DRAGGING: RefCell<bool> = const { RefCell::new(false) };
     static COVER_ROTATION: RefCell<f32> = const { RefCell::new(0.0) };
@@ -158,7 +159,19 @@ pub fn get_cached_media_image_with_key(media: &MediaInfo) -> Option<(Image, u64)
             }
         });
     }
+    if result.is_none() && COVER_HOLD.with(|cell| *cell.borrow()) {
+        result = IMG_CACHE.with(|cache| {
+            cache
+                .borrow()
+                .as_ref()
+                .and_then(|(key, image)| image.clone().map(|image| (image, *key)))
+        });
+    }
     result
+}
+
+pub fn set_cover_hold(hold: bool) {
+    COVER_HOLD.with(|cell| *cell.borrow_mut() = hold);
 }
 
 pub fn get_media_spectrum_fill(media: &MediaInfo) -> SpectrumFill {

@@ -220,6 +220,7 @@ timer_ends_at=Ends {}
 timer_done=Time's up
 timer_done_toast={} timer finished
 timer_scroll_hint=Scroll to adjust
+timer_fine_hint=Scroll to fine-tune
 clipboard_link_prompt=Ask to Open Copied Links
 link_prompt_title=Open copied link?
 link_prompt_open=Open

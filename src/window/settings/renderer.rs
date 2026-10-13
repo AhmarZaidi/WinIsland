@@ -104,6 +104,7 @@ impl SettingsApp {
         if win.is_minimized() == Some(true) {
             return;
         }
+        let window_id = win.id();
         let (p_w, p_h, scale) = {
             let size = win.inner_size();
             (
@@ -139,13 +140,25 @@ impl SettingsApp {
             Some(target) => target,
             None => return,
         };
+        if self.window_backdrop {
+            self.window_backdrop = crate::platform::window().update_window_backdrop(
+                window_id,
+                (SIDEBAR_W + WINDOW_RADIUS) * scale,
+                p_h as f32,
+                WINDOW_RADIUS * scale,
+            );
+        }
         let render_result = renderer.frame(target, |drawing_context, painter| {
             painter.scale(Vec2::new(scale, scale));
 
             let win_rect = Rect::from_xywh(0.0, 0.0, win_w, win_h);
             painter.save();
             painter.clip_round_rect(win_rect, Radius::uniform(WINDOW_RADIUS));
-            painter.fill_rect(win_rect, settings_color(theme.win_bg));
+            let content_left = if self.window_backdrop { SIDEBAR_W } else { 0.0 };
+            painter.fill_rect(
+                Rect::from_xywh(content_left, 0.0, win_w - content_left, win_h),
+                settings_color(theme.win_bg),
+            );
 
             self.draw_sidebar(drawing_context, painter, &theme);
             self.draw_page_navigation(painter, &theme);
