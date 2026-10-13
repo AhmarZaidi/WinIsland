@@ -22,6 +22,7 @@ const SETTLE_PIXEL_VELOCITY: f32 = 0.05;
 const HIDDEN_FRAME_INTERVAL: Duration = Duration::from_millis(100);
 pub(super) const WORKING_SET_TRIM_INTERVAL: Duration = Duration::from_secs(20);
 const RENDERER_RECOVERY_INTERVAL: Duration = Duration::from_secs(1);
+const COVER_WAIT: Duration = Duration::from_millis(2500);
 const LYRIC_TRANSITION_STEP: f32 = 0.05;
 const LYRIC_TRANSITION_LEAD_MS: u64 = (1000.0 / (60.0 * LYRIC_TRANSITION_STEP as f64)) as u64;
 
@@ -577,13 +578,9 @@ impl App {
     fn poll_media_info(&mut self, window: &WindowRef) -> (bool, bool) {
         self.smtc
             .set_enabled(self.config.smtc_enabled && crate::platform::capabilities().media_session);
-        let smtc_cover_changed = self.smtc.take_info_if_changed().is_some_and(|media| {
-            let cover_changed = self.plugin_media_source.is_none()
-                && media.thumbnail.is_some()
-                && media.thumbnail_hash != self.smtc_media_info.thumbnail_hash;
+        if let Some(media) = self.smtc.take_info_if_changed() {
             self.smtc_media_info = media;
-            cover_changed
-        });
+        }
         self.audio.set_target_app_id(self.audio_target_app_id());
         let music_active = self.media_active();
         let media_is_playing = music_active && self.current_media_info().is_playing;
@@ -596,8 +593,17 @@ impl App {
         let title = media.title.clone();
         let artist = media.artist.clone();
         let album = media.album.clone();
+        let cover_hash = if media.thumbnail.is_some() {
+            media.thumbnail_hash
+        } else {
+            0
+        };
         if !music_active {
             self.audio.set_gate_override(false);
+            self.cover_hash = 0;
+            self.cover_seen = false;
+            self.cover_wait = None;
+            crate::ui::expanded::music_view::set_cover_hold(false);
             if !self.last_media_title.is_empty() {
                 self.last_media_title.clear();
                 crate::ui::expanded::music_view::clear_cover_cache();
@@ -608,10 +614,28 @@ impl App {
         if track_changed {
             log::info!("Track changed: {title} - {artist} / {album}");
             self.last_media_title = title;
-            crate::ui::expanded::music_view::trigger_cover_flip();
             window.request_redraw();
-        } else if smtc_cover_changed {
-            log::info!("SMTC: late thumbnail applied");
+        }
+        if music_active && cover_hash != 0 {
+            if cover_hash != self.cover_hash {
+                if self.cover_seen {
+                    crate::ui::expanded::music_view::trigger_cover_flip();
+                }
+                self.cover_hash = cover_hash;
+                self.cover_seen = true;
+                window.request_redraw();
+            }
+            self.cover_wait = None;
+            crate::ui::expanded::music_view::set_cover_hold(false);
+        } else if track_changed && self.cover_seen {
+            self.cover_wait = Some(Instant::now() + COVER_WAIT);
+            crate::ui::expanded::music_view::set_cover_hold(true);
+        } else if self
+            .cover_wait
+            .is_some_and(|deadline| Instant::now() >= deadline)
+        {
+            self.cover_wait = None;
+            self.cover_hash = 0;
             crate::ui::expanded::music_view::trigger_cover_flip();
             window.request_redraw();
         }

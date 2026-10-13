@@ -2,8 +2,7 @@ use std::time::Instant;
 
 use crate::ui::expanded::music_view::{
     get_cover_rect, get_next_btn_rect, get_pause_btn_rect, get_prev_btn_rect,
-    get_progress_bar_rect, trigger_cover_flip, trigger_next_click, trigger_pause_click,
-    trigger_prev_click,
+    get_progress_bar_rect, trigger_next_click, trigger_pause_click, trigger_prev_click,
 };
 use crate::ui::widget::expanded::{widget_corner_radius, widget_grid_layout};
 use crate::utils::mouse::{
@@ -92,8 +91,8 @@ impl App {
         }
     }
 
-        crate::ui::expanded::timer_view::clear_selection();
     pub(super) fn handle_press(&mut self, rel_x: i32, rel_y: i32, layout: &IslandLayout) {
+        crate::ui::expanded::timer_view::clear_selection();
         let island_y = layout.island_y;
         let offset_x = layout.offset_x;
         let current_island_x = layout.current_island_x;
@@ -317,7 +316,6 @@ impl App {
                     && cy >= py
                     && cy <= py + ph
                 {
-                    trigger_cover_flip();
                     trigger_prev_click();
                     self.dispatch_media_command(
                         winisland_plugin_api::types::v2::context::MEDIA_COMMAND_PREVIOUS,
@@ -341,7 +339,6 @@ impl App {
                     && cy >= ny
                     && cy <= ny + nh
                 {
-                    trigger_cover_flip();
                     trigger_next_click();
                     self.dispatch_media_command(
                         winisland_plugin_api::types::v2::context::MEDIA_COMMAND_NEXT,
@@ -559,10 +556,10 @@ impl App {
 
     pub(super) fn expand(&mut self) {
         if self.expanded_pages().is_empty() {
-        crate::ui::expanded::timer_view::clear_selection();
             return;
         }
         self.compact_overlay.dismiss_link();
+        crate::ui::expanded::timer_view::clear_selection();
         if self.hide.has_hidden_reason() {
             self.reveal_island();
         }
