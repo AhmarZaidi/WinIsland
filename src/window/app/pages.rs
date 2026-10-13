@@ -282,16 +282,27 @@ impl App {
             return false;
         }
         let dominant = |x: f32, y: f32| if x.abs() > y.abs() { x } else { -y };
-        let over_timer_dial = self.page_focused(ExpandedPage::Timer)
-            && crate::ui::expanded::timer_view::hit_test(
-                layout.offset_x as f32 + self.page_translation(ExpandedPage::Timer),
-                layout.island_y as f32,
-                self.springs.w.value,
-                self.springs.h.value,
-                self.config.expanded_scale,
-                Point::new(rel_x as f32, rel_y as f32),
-            ) == Some(crate::ui::expanded::timer_view::TimerAction::Dial);
-        if over_timer_dial {
+        let timer_target = self
+            .page_focused(ExpandedPage::Timer)
+            .then(|| {
+                crate::ui::expanded::timer_view::hit_test(
+                    layout.offset_x as f32 + self.page_translation(ExpandedPage::Timer),
+                    layout.island_y as f32,
+                    self.springs.w.value,
+                    self.springs.h.value,
+                    self.config.expanded_scale,
+                    Point::new(rel_x as f32, rel_y as f32),
+                )
+            })
+            .flatten()
+            .filter(|action| {
+                matches!(
+                    action,
+                    crate::ui::expanded::timer_view::TimerAction::Dial
+                        | crate::ui::expanded::timer_view::TimerAction::Field(_)
+                )
+            });
+        if let Some(target) = timer_target {
             let steps = match delta {
                 MouseWheelDelta::Lines { x, y } => -dominant(x, y).signum() as i32,
                 MouseWheelDelta::Pixels { x, y } => {
@@ -302,7 +313,7 @@ impl App {
                 }
             };
             self.idle_timer = Instant::now();
-            return crate::ui::expanded::timer_view::adjust_minutes(steps);
+            return crate::ui::expanded::timer_view::scroll(target, steps);
         }
         let step = match delta {
             MouseWheelDelta::Lines { x, y } => {

@@ -11,7 +11,7 @@ use winisland_render::{Angle, Painter, Point, Radius, Rect, Rgba, StrokeCap};
 const ORANGE: Rgba = Rgba::from_rgb(255, 159, 10);
 const GREEN: Rgba = Rgba::from_rgb(48, 209, 88);
 const PRESETS: [u64; 6] = [1, 5, 10, 15, 25, 60];
-const DEFAULT_MINUTES: u64 = 5;
+const DEFAULT_SECONDS: u64 = 5 * 60;
 const COLUMN_GAP: f32 = 18.0;
 const CHIP_GAP: f32 = 6.0;
 const PRESS_SECS: f32 = 0.26;
@@ -21,9 +21,41 @@ const LABEL_SECS: f32 = 0.22;
 const POP_SECS: f32 = 0.5;
 const FINISHED_PULSE_SECS: f32 = 8.0;
 const SETTLE_EPSILON: f32 = 0.002;
-const CONTROL_COUNT: usize = PRESETS.len() + 3;
-const MIN_MINUTES: u64 = 1;
-const MAX_MINUTES: u64 = 180;
+const CONTROL_COUNT: usize = PRESETS.len() + 3 + TimeField::ALL.len();
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TimeField {
+    Hours,
+    Minutes,
+    Seconds,
+}
+
+impl TimeField {
+    const ALL: [Self; 3] = [Self::Hours, Self::Minutes, Self::Seconds];
+
+    fn unit(self) -> u64 {
+        match self {
+            Self::Hours => 3600,
+            Self::Minutes => 60,
+            Self::Seconds => 1,
+        }
+    }
+
+    fn max(self) -> u64 {
+        match self {
+            Self::Hours => 23,
+            Self::Minutes | Self::Seconds => 59,
+        }
+    }
+
+    fn coarse_step(self) -> u64 {
+        match self {
+            Self::Hours => 1,
+            Self::Minutes => 5,
+            Self::Seconds => 10,
+        }
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TimerAction {
@@ -31,6 +63,7 @@ pub enum TimerAction {
     Primary,
     Cancel,
     Dial,
+    Field(TimeField),
 }
 
 impl TimerAction {
@@ -40,6 +73,7 @@ impl TimerAction {
             Self::Primary => PRESETS.len(),
             Self::Cancel => PRESETS.len() + 1,
             Self::Dial => PRESETS.len() + 2,
+            Self::Field(field) => PRESETS.len() + 3 + field as usize,
         }
     }
 }
@@ -85,8 +119,10 @@ impl PrimaryStyle {
 }
 
 struct TimerState {
-    minutes: u64,
+    seconds: u64,
     phase: Phase,
+    selected: Option<TimeField>,
+    selection: [f32; TimeField::ALL.len()],
     hover_target: Option<TimerAction>,
     hover: [f32; CONTROL_COUNT],
     press: Option<(TimerAction, Instant)>,
@@ -101,8 +137,10 @@ struct TimerState {
 
 thread_local! {
     static TIMER: RefCell<TimerState> = const { RefCell::new(TimerState {
-        minutes: DEFAULT_MINUTES,
+        seconds: DEFAULT_SECONDS,
         phase: Phase::Idle,
+        selected: None,
+        selection: [0.0; TimeField::ALL.len()],
         hover_target: None,
         hover: [0.0; CONTROL_COUNT],
         press: None,
@@ -197,25 +235,21 @@ fn presets_enabled(phase: Phase) -> bool {
     matches!(phase, Phase::Idle | Phase::Finished { .. })
 }
 
-fn total_duration(minutes: u64) -> Duration {
-    Duration::from_secs(minutes * 60)
-}
-
-fn remaining(phase: Phase, minutes: u64, now: Instant) -> Duration {
+fn remaining(phase: Phase, seconds: u64, now: Instant) -> Duration {
     match phase {
-        Phase::Idle => total_duration(minutes),
+        Phase::Idle => Duration::from_secs(seconds),
         Phase::Running { ends_at } => ends_at.saturating_duration_since(now),
         Phase::Paused { remaining } => remaining,
         Phase::Finished { .. } => Duration::ZERO,
     }
 }
 
-fn ring_targets(phase: Phase, minutes: u64, now: Instant) -> (f32, f32) {
-    let total = total_duration(minutes);
+fn ring_targets(phase: Phase, seconds: u64, now: Instant) -> (f32, f32) {
+    let total = Duration::from_secs(seconds);
     let fraction = if total.is_zero() {
         0.0
     } else {
-        (remaining(phase, minutes, now).as_secs_f32() / total.as_secs_f32()).clamp(0.0, 1.0)
+        (remaining(phase, seconds, now).as_secs_f32() / total.as_secs_f32()).clamp(0.0, 1.0)
     };
     match phase {
         Phase::Idle => (1.0, 0.35),
@@ -230,15 +264,21 @@ pub fn apply_action(action: TimerAction) {
         let mut timer = cell.borrow_mut();
         let now = Instant::now();
         timer.press = Some((action, now));
-        let total = total_duration(timer.minutes);
+        let total = Duration::from_secs(timer.seconds);
         timer.phase = match (action, timer.phase) {
             (TimerAction::Preset(index), phase) if presets_enabled(phase) => {
-                timer.minutes = PRESETS[index.min(PRESETS.len() - 1)];
+                timer.seconds = PRESETS[index.min(PRESETS.len() - 1)] * 60;
                 Phase::Idle
             }
-            (TimerAction::Primary, Phase::Idle | Phase::Finished { .. }) => Phase::Running {
-                ends_at: now + total,
-            },
+            (TimerAction::Field(field), phase) if presets_enabled(phase) => {
+                timer.selected = Some(field);
+                Phase::Idle
+            }
+            (TimerAction::Primary, Phase::Idle | Phase::Finished { .. }) if !total.is_zero() => {
+                Phase::Running {
+                    ends_at: now + total,
+                }
+            }
             (TimerAction::Primary, Phase::Running { ends_at }) => Phase::Paused {
                 remaining: ends_at.saturating_duration_since(now),
             },
@@ -248,7 +288,22 @@ pub fn apply_action(action: TimerAction) {
             (TimerAction::Cancel, _) => Phase::Idle,
             (_, phase) => phase,
         };
+        if !presets_enabled(timer.phase) {
+            timer.selected = None;
+        }
     });
+}
+
+pub fn clear_selection() {
+    TIMER.with(|cell| cell.borrow_mut().selected = None);
+}
+
+pub fn duration_label(seconds: u64) -> String {
+    if seconds % 60 == 0 {
+        tr_args("timer_minutes", &[&(seconds / 60).to_string()])
+    } else {
+        format_remaining(Duration::from_secs(seconds))
+    }
 }
 
 pub fn poll_finished() -> Option<u64> {
@@ -264,7 +319,7 @@ pub fn poll_finished() -> Option<u64> {
             return None;
         }
         timer.phase = Phase::Finished { at: now };
-        Some(timer.minutes)
+        Some(timer.seconds)
     })
 }
 
@@ -274,10 +329,10 @@ pub fn compact_content() -> Option<TimerContent> {
         if !matches!(timer.phase, Phase::Running { .. } | Phase::Paused { .. }) {
             return None;
         }
-        let left = remaining(timer.phase, timer.minutes, Instant::now());
+        let left = remaining(timer.phase, timer.seconds, Instant::now());
         Some(TimerContent {
             remaining: left,
-            total: total_duration(timer.minutes),
+            total: Duration::from_secs(timer.seconds),
             paused: matches!(timer.phase, Phase::Paused { .. }),
         })
     })
@@ -296,12 +351,13 @@ pub fn needs_frames() -> bool {
     TIMER.with(|cell| {
         let timer = cell.borrow();
         let now = Instant::now();
-        let (ring_fraction, ring_alpha) = ring_targets(timer.phase, timer.minutes, now);
+        let (ring_fraction, ring_alpha) = ring_targets(timer.phase, timer.seconds, now);
         let chips_target = if presets_enabled(timer.phase) {
             1.0
         } else {
             0.35
         };
+        let selected = timer.selected;
         matches!(timer.phase, Phase::Running { .. })
             || matches!(timer.phase, Phase::Finished { at } if progress(at, now, FINISHED_PULSE_SECS).is_some())
             || timer
@@ -314,6 +370,12 @@ pub fn needs_frames() -> bool {
             || (timer.ring_fraction - ring_fraction).abs() > SETTLE_EPSILON
             || (timer.ring_alpha - ring_alpha).abs() > SETTLE_EPSILON
             || (timer.chips_enabled - chips_target).abs() > SETTLE_EPSILON
+            || TimeField::ALL
+                .into_iter()
+                .zip(timer.selection)
+                .any(|(field, value)| {
+                    (f32::from(selected == Some(field)) - value).abs() > SETTLE_EPSILON
+                })
             || timer.hover.iter().enumerate().any(|(index, value)| {
                 let target = f32::from(
                     timer
@@ -327,7 +389,10 @@ pub fn needs_frames() -> bool {
 
 pub fn hit_test(ox: f32, oy: f32, w: f32, h: f32, scale: f32, point: Point) -> Option<TimerAction> {
     let layout = layout(ox, oy, w, h, scale);
-    let phase = TIMER.with(|cell| cell.borrow().phase);
+    let (phase, seconds) = TIMER.with(|cell| {
+        let timer = cell.borrow();
+        (timer.phase, timer.seconds)
+    });
     if layout.primary.contains(point) {
         return Some(TimerAction::Primary);
     }
@@ -340,7 +405,14 @@ pub fn hit_test(ox: f32, oy: f32, w: f32, h: f32, scale: f32, point: Point) -> O
     let dx = point.x - layout.ring_center.x;
     let dy = point.y - layout.ring_center.y;
     if dx * dx + dy * dy <= layout.ring_radius * layout.ring_radius {
-        return Some(TimerAction::Dial);
+        let text = time_text(phase, seconds, Instant::now());
+        let size = time_size(&layout, &text, scale);
+        let field = TimeField::ALL
+            .into_iter()
+            .zip(field_rects(&text, size, time_center(&layout, size)))
+            .find(|(_, rect)| rect.contains(point))
+            .map(|(field, _)| TimerAction::Field(field));
+        return field.or(Some(TimerAction::Dial));
     }
     layout
         .chips
@@ -349,27 +421,80 @@ pub fn hit_test(ox: f32, oy: f32, w: f32, h: f32, scale: f32, point: Point) -> O
         .map(TimerAction::Preset)
 }
 
-pub fn adjust_minutes(steps: i32) -> bool {
+pub fn scroll(target: TimerAction, steps: i32) -> bool {
     TIMER.with(|cell| {
         let mut timer = cell.borrow_mut();
         if steps == 0 || !presets_enabled(timer.phase) {
             return false;
         }
-        let mut minutes = timer.minutes;
+        let (field, step) = match (timer.selected, target) {
+            (Some(field), _) => (field, 1),
+            (None, TimerAction::Field(field)) => (field, field.coarse_step()),
+            (None, _) => (TimeField::Minutes, TimeField::Minutes.coarse_step()),
+        };
+        let unit = field.unit();
+        let value = timer.seconds / unit % (field.max() + 1);
+        let mut next = value;
         for _ in 0..steps.unsigned_abs() {
-            minutes = if steps > 0 {
-                minutes + if minutes < 60 { 1 } else { 5 }
+            next = if steps > 0 {
+                ((next / step + 1) * step).min(field.max())
             } else {
-                minutes.saturating_sub(if minutes <= 60 { 1 } else { 5 })
-            }
-            .clamp(MIN_MINUTES, MAX_MINUTES);
+                next.saturating_sub(1) / step * step
+            };
         }
-        if minutes == timer.minutes {
+        if next == value {
             return false;
         }
-        timer.minutes = minutes;
+        timer.seconds = timer.seconds - value * unit + next * unit;
         timer.phase = Phase::Idle;
         true
+    })
+}
+
+fn time_text(phase: Phase, seconds: u64, now: Instant) -> String {
+    let left = remaining(phase, seconds, now);
+    if presets_enabled(phase) {
+        let total = left.as_secs();
+        format!(
+            "{}:{:02}:{:02}",
+            total / 3600,
+            total % 3600 / 60,
+            total % 60
+        )
+    } else {
+        format_remaining(left)
+    }
+}
+
+fn ring_stroke(radius: f32, scale: f32) -> f32 {
+    (radius * 0.12).max(3.0 * scale)
+}
+
+fn time_size(layout: &TimerLayout, text: &str, scale: f32) -> f32 {
+    let stroke = ring_stroke(layout.ring_radius, scale);
+    let inner_width = ((layout.ring_radius - stroke / 2.0).max(0.0) - stroke) * 1.7;
+    let size = layout.ring_radius * 0.42;
+    let width = RollingTime::measure_width(text, size);
+    if width <= inner_width || width <= f32::EPSILON {
+        size
+    } else {
+        size * inner_width / width
+    }
+}
+
+fn time_center(layout: &TimerLayout, size: f32) -> Point {
+    Point::new(layout.ring_center.x, layout.ring_center.y - size * 0.12)
+}
+
+fn field_rects(text: &str, size: f32, center: Point) -> [Rect; TimeField::ALL.len()] {
+    let colon = RollingTime::measure_width(":", size);
+    let mut x = center.x - RollingTime::measure_width(text, size) / 2.0;
+    let mut parts = text.split(':');
+    std::array::from_fn(|_| {
+        let width = RollingTime::measure_width(parts.next().unwrap_or_default(), size);
+        let rect = Rect::from_xywh(x - colon / 2.0, center.y - size / 2.0, width + colon, size);
+        x += width + colon;
+        rect
     })
 }
 
@@ -403,8 +528,10 @@ fn fitted_size(text: &str, size: f32, max_width: f32) -> f32 {
 }
 
 struct Frame {
-    minutes: u64,
+    seconds: u64,
     phase: Phase,
+    selected: Option<TimeField>,
+    selection: [f32; TimeField::ALL.len()],
     hover: [f32; CONTROL_COUNT],
     press: Option<(TimerAction, f32)>,
     ring_fraction: f32,
@@ -431,7 +558,11 @@ fn advance(now: Instant) -> Frame {
             let target = f32::from(hover_target.is_some_and(|action| action.index() == index));
             approach(value, target, hover_blend);
         }
-        let (ring_fraction, ring_alpha) = ring_targets(timer.phase, timer.minutes, now);
+        let selected = timer.selected;
+        for (field, value) in TimeField::ALL.into_iter().zip(timer.selection.iter_mut()) {
+            approach(value, f32::from(selected == Some(field)), hover_blend);
+        }
+        let (ring_fraction, ring_alpha) = ring_targets(timer.phase, timer.seconds, now);
         let running = matches!(timer.phase, Phase::Running { .. });
         let fraction_blend = if running && (timer.ring_fraction - ring_fraction).abs() < 0.02 {
             1.0
@@ -466,8 +597,10 @@ fn advance(now: Instant) -> Frame {
             timer.primary_change = None;
         }
         Frame {
-            minutes: timer.minutes,
+            seconds: timer.seconds,
             phase: timer.phase,
+            selected,
+            selection: timer.selection,
             hover: timer.hover,
             press,
             ring_fraction: timer.ring_fraction,
@@ -505,29 +638,31 @@ pub fn draw_timer_page(
     let layout = layout(ox, oy, w, h, scale);
     let opacity = f32::from(alpha) / 255.0;
     let now = Instant::now();
-    let (minutes, phase) = TIMER.with(|cell| {
-        let timer = cell.borrow();
-        (timer.minutes, timer.phase)
-    });
-    let left = remaining(phase, minutes, now);
-    let time_text = format_remaining(left);
     let frame = advance(now);
+    let left = remaining(frame.phase, frame.seconds, now);
+    let time_text = time_text(frame.phase, frame.seconds, now);
+    let editable = presets_enabled(frame.phase);
     let pressed = |action: TimerAction| {
         frame
             .press
             .filter(|(pressed, _)| *pressed == action)
             .map_or(0.0, |(_, amount)| amount)
     };
+    let field_hover = TimeField::ALL
+        .into_iter()
+        .map(|field| frame.hover[TimerAction::Field(field).index()])
+        .fold(0.0, f32::max);
+    let dial_hover = frame.hover[TimerAction::Dial.index()].max(field_hover);
 
     let center = layout.ring_center;
     let radius = layout.ring_radius;
-    let stroke = (radius * 0.12).max(3.0 * scale);
+    let stroke = ring_stroke(radius, scale);
     let ring_radius = (radius - stroke / 2.0).max(0.0);
     painter.stroke_circle(
         center,
         ring_radius,
         stroke,
-        text_color.with_alpha_f((0.12 + 0.08 * frame.hover[TimerAction::Dial.index()]) * opacity),
+        text_color.with_alpha_f((0.12 + 0.08 * dial_hover) * opacity),
     );
     let pulse = match frame.phase {
         Phase::Finished { at } => progress(at, now, FINISHED_PULSE_SECS).map_or(1.0, |t| {
@@ -558,18 +693,66 @@ pub fn draw_timer_page(
         }
         _ => 1.0,
     };
-    let time_size = fitted_size(&time_text, radius * 0.42, inner_width) * pop;
+    let time_size = time_size(&layout, &time_text, scale) * pop;
+    let time_anchor = time_center(&layout, time_size);
+    let base_color = text_color.with_alpha_f(opacity);
+    let mut colors = Vec::new();
+    if editable {
+        let colon = RollingTime::measure_width(":", time_size);
+        let corner = Radius::uniform(time_size * 0.2);
+        for ((field, rect), selection) in TimeField::ALL
+            .into_iter()
+            .zip(field_rects(&time_text, time_size, time_anchor))
+            .zip(frame.selection)
+        {
+            let pill = Rect::from_ltrb(
+                rect.left + colon * 0.25,
+                rect.top + time_size * 0.08,
+                rect.right - colon * 0.25,
+                rect.bottom - time_size * 0.08,
+            );
+            let hover_amount = frame.hover[TimerAction::Field(field).index()] * (1.0 - selection);
+            if hover_amount > SETTLE_EPSILON {
+                painter.fill_round_rect(
+                    pill,
+                    corner,
+                    text_color.with_alpha_f(0.1 * hover_amount * opacity),
+                );
+            }
+            if selection > SETTLE_EPSILON {
+                painter.fill_round_rect(
+                    pill,
+                    corner,
+                    ORANGE.with_alpha_f(0.22 * selection * opacity),
+                );
+            }
+        }
+        let mut field = 0;
+        colors = time_text
+            .chars()
+            .map(|character| {
+                if character == ':' {
+                    field += 1;
+                    return base_color;
+                }
+                let selection = frame.selection[field.min(TimeField::ALL.len() - 1)];
+                blend_color(text_color, ORANGE, selection).with_alpha_f(opacity)
+            })
+            .collect();
+    }
     TIMER.with(|cell| {
-        cell.borrow_mut().time.draw(
+        cell.borrow_mut().time.draw_with(
             painter,
             &time_text,
-            TimeAnchor::Center(Point::new(center.x, center.y - time_size * 0.12)),
+            TimeAnchor::Center(time_anchor),
             time_size,
-            text_color.with_alpha_f(opacity),
+            |index| colors.get(index).copied().unwrap_or(base_color),
         );
     });
-    let dial_hover = frame.hover[TimerAction::Dial.index()];
     let (caption, caption_color) = match frame.phase {
+        Phase::Idle | Phase::Finished { .. } if frame.selected.is_some() => {
+            (tr("timer_fine_hint"), ORANGE.with_alpha_f(0.85 * opacity))
+        }
         Phase::Idle | Phase::Finished { .. } if dial_hover > 0.5 => {
             (tr("timer_scroll_hint"), ORANGE.with_alpha_f(0.85 * opacity))
         }
@@ -601,7 +784,7 @@ pub fn draw_timer_page(
             continue;
         }
         let action = TimerAction::Preset(index);
-        let selected = PRESETS[index] == frame.minutes;
+        let selected = PRESETS[index] * 60 == frame.seconds;
         let enabled_factor = frame.chips_enabled;
         let hover_amount = frame.hover[action.index()];
         let fill = if selected {
@@ -637,6 +820,11 @@ pub fn draw_timer_page(
     } else {
         1.0
     };
+    let primary_enabled = if editable && frame.seconds == 0 {
+        0.4
+    } else {
+        1.0
+    };
     let (primary_color, primary_labels) = match frame.primary_change {
         Some((previous, eased)) => (
             blend_color(previous.color(), frame.primary.color(), eased),
@@ -660,7 +848,7 @@ pub fn draw_timer_page(
             layout.primary,
             primary_labels,
             primary_color,
-            1.0,
+            primary_enabled,
         ),
     ];
     for (action, rect, labels, tint, enabled_factor) in buttons {

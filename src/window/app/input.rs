@@ -92,6 +92,7 @@ impl App {
         }
     }
 
+        crate::ui::expanded::timer_view::clear_selection();
     pub(super) fn handle_press(&mut self, rel_x: i32, rel_y: i32, layout: &IslandLayout) {
         let island_y = layout.island_y;
         let offset_x = layout.offset_x;
@@ -558,6 +559,7 @@ impl App {
 
     pub(super) fn expand(&mut self) {
         if self.expanded_pages().is_empty() {
+        crate::ui::expanded::timer_view::clear_selection();
             return;
         }
         self.compact_overlay.dismiss_link();

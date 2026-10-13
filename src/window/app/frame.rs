@@ -489,15 +489,15 @@ impl App {
     }
 
     fn handle_timer_finished(&mut self, window: &WindowRef) {
-        let Some(minutes) = crate::ui::expanded::timer_view::poll_finished() else {
+        let Some(seconds) = crate::ui::expanded::timer_view::poll_finished() else {
             return;
         };
-        log::info!("Timer finished ({minutes} min)");
+        log::info!("Timer finished ({seconds} s)");
         self.compact_overlay.show_timer_finished();
         self.expanded = false;
         self.reset_page();
         if !self.visible || self.fullscreen_hide_active() {
-            let duration = winisland_core::i18n::tr_args("timer_minutes", &[&minutes.to_string()]);
+            let duration = crate::ui::expanded::timer_view::duration_label(seconds);
             Self::show_toast(
                 &winisland_core::i18n::tr("timer_done"),
                 &winisland_core::i18n::tr_args("timer_done_toast", &[&duration]),

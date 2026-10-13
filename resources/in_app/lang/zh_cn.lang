@@ -220,6 +220,7 @@ timer_ends_at={} 结束
 timer_done=时间到
 timer_done_toast={} 计时已结束
 timer_scroll_hint=滚动以调整
+timer_fine_hint=滚动以微调
 clipboard_link_prompt=询问打开复制的链接
 link_prompt_title=打开复制的链接？
 link_prompt_open=打开
