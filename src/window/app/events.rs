@@ -453,8 +453,7 @@ impl App {
                                 },
                                 frost_sigma: self.config.liquid_glass_blur * liquid_scale,
                                 active: self.recorder.is_some()
-                                    || (!compact_components_hidden
-                                        && self.config.island_style == "liquid"),
+                                    || self.config.island_style == "liquid",
                                 animating: self.recorder.is_some() || self.springs.any_animating(),
                             },
                         );
@@ -497,6 +496,7 @@ impl App {
                                             } else {
                                                 media_info
                                             },
+                                            backdrop: media_info,
                                             music_active: music_active
                                                 && !compact_components_hidden,
                                             available_controls,
@@ -515,11 +515,7 @@ impl App {
                                             lyric_side_gap: self.config.lyrics_side_gap,
                                         },
                                         style: crate::ui::island::StyleParams {
-                                            island_style: if compact_components_hidden {
-                                                "solid"
-                                            } else {
-                                                &self.config.island_style
-                                            },
+                                            island_style: &self.config.island_style,
                                             host_backdrop,
                                             liquid_backdrop: (self.config.island_style == "liquid")
                                                 .then(|| drawing_context.backdrop())

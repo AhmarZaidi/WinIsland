@@ -56,6 +56,7 @@ pub struct LayoutParams {
 
 pub struct MediaParams<'a> {
     pub media: &'a MediaInfo,
+    pub backdrop: &'a MediaInfo,
     pub music_active: bool,
     pub available_controls: u32,
 }
@@ -309,7 +310,7 @@ fn draw_background_layer(
         island_path,
         island_style: params.style.island_style,
         host_backdrop: params.style.host_backdrop,
-        media: params.media.media,
+        media: params.media.backdrop,
     });
 }
 
@@ -449,7 +450,7 @@ fn draw_pager(painter: Painter<'_>, params: &DrawIslandParams<'_>, rect: Rect, a
         return;
     }
     let backdrop = (params.style.island_style == "dynamic")
-        .then(|| crate::utils::backdrop::get_blurred_cover_background(params.media.media))
+        .then(|| crate::utils::backdrop::get_blurred_cover_background(params.media.backdrop))
         .flatten();
     pager::draw(PagerParams {
         painter,
