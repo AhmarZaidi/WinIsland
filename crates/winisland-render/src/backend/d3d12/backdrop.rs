@@ -222,6 +222,11 @@ impl SharedBackdrop {
     }
 
     fn render_frost(&mut self, context: &mut DirectContext, sharp: &Image) -> Option<Image> {
+        if self.frost_sigma < MIN_WORK_SIGMA {
+            self.frost_surfaces = Default::default();
+            self.frost_scale = 1.0;
+            return Some(sharp.clone());
+        }
         let effect = FROST.with(|cell| {
             cell.get_or_init(|| {
                 RuntimeEffect::make_for_shader(include_str!("../../frost.sksl"), None)

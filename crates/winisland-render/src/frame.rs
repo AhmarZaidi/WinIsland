@@ -58,9 +58,8 @@ impl DrawingContext<'_> {
     /// Returns the screen content captured beneath this frame's window, if any.
     pub fn backdrop(&mut self) -> Option<Backdrop> {
         let backdrop = self.backdrop.as_mut()?;
-        let (sharp, blurred) = backdrop.images(self.direct_context)?;
+        let (_, blurred) = backdrop.images(self.direct_context)?;
         Some(Backdrop {
-            sharp,
             blurred,
             blur_scale: backdrop.frost_scale(),
         })

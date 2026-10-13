@@ -15,15 +15,16 @@ const CONTINUOUS_CORNER_EXPONENT: f32 = 2.5;
 const CIRCULAR_APEX_INSET: f32 = 1.0 - FRAC_1_SQRT_2;
 const MAX_BEZEL_FRACTION: f32 = 0.7;
 const MAX_DISPERSION: f32 = 0.5;
+const EDGE_REACH: f32 = 1.0;
+const SHARP_RIM_REACH: f32 = 0.08;
 
 thread_local! {
     static EFFECT: OnceCell<Option<RuntimeEffect>> = const { OnceCell::new() };
 }
 
-/// Screen content beneath the current window, sharp and blurred, addressed in surface pixels.
+/// Blurred screen content beneath the current window, addressed in surface pixels.
 #[derive(Clone)]
 pub struct Backdrop {
-    pub(crate) sharp: skia_safe::Image,
     pub(crate) blurred: skia_safe::Image,
     pub(crate) blur_scale: f32,
 }
@@ -292,6 +293,12 @@ impl<'a> Painter<'a> {
         uniforms.set("shadowAlpha", &[material.shadow_alpha]);
         uniforms.set("opacity", &[opacity]);
         uniforms.set("blackFade", &[material.black_fade.clamp(0.0, 1.0)]);
+        let rim_reach = if backdrop.blur_scale > 1.0 {
+            EDGE_REACH
+        } else {
+            (bezel * SHARP_RIM_REACH * material.displacement_factor).clamp(EDGE_REACH, bezel)
+        };
+        uniforms.set("rimReach", &[rim_reach]);
 
         let sampling = SamplingOptions::new(FilterMode::Linear, MipmapMode::None);
         let Some(blurred) = backdrop.blurred.to_shader(
@@ -301,14 +308,7 @@ impl<'a> Painter<'a> {
         ) else {
             return false;
         };
-        let Some(sharp) =
-            backdrop
-                .sharp
-                .to_shader((TileMode::Clamp, TileMode::Clamp), sampling, None)
-        else {
-            return false;
-        };
-        let children = [ChildPtr::from(blurred), ChildPtr::from(sharp)];
+        let children = [ChildPtr::from(blurred)];
         let Some(shader) = effect.make_shader(Data::new_copy(&uniforms.bytes), &children, None)
         else {
             return false;
