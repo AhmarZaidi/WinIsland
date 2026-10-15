@@ -1,3 +1,4 @@
+use super::color::Rgba;
 use super::geom::Rect;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
@@ -41,6 +42,7 @@ pub struct ImageOptions {
     pub alpha: u8,
     pub alpha_f: Option<f32>,
     pub anti_alias: bool,
+    pub tint: Option<Rgba>,
 }
 
 impl Default for ImageOptions {
@@ -53,6 +55,7 @@ impl Default for ImageOptions {
             alpha: 255,
             alpha_f: None,
             anti_alias: true,
+            tint: None,
         }
     }
 }
@@ -91,6 +94,11 @@ impl ImageOptions {
 
     pub fn with_anti_alias(mut self, anti_alias: bool) -> Self {
         self.anti_alias = anti_alias;
+        self
+    }
+
+    pub fn with_tint(mut self, tint: Rgba) -> Self {
+        self.tint = Some(tint);
         self
     }
 }

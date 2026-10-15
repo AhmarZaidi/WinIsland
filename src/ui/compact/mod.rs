@@ -70,13 +70,15 @@ impl ActiveCompactOverlay<'_> {
         }
     }
 
-    fn draw(&self, painter: Painter<'_>, rect: Rect, scale: f32, alpha: f32) {
+    fn draw(&self, painter: Painter<'_>, rect: Rect, scale: f32, alpha: f32, is_light: bool) {
         match self {
-            Self::TimerFinished(indicator) => indicator.draw(painter, rect, scale, alpha),
-            Self::Link(indicator) => indicator.draw(painter, rect, scale, alpha),
-            Self::Notification(indicator) => indicator.draw(painter, rect, scale, alpha),
-            Self::Volume(indicator) => indicator.draw(painter, rect, scale, alpha),
-            Self::Brightness(indicator) => indicator.draw_brightness(painter, rect, scale, alpha),
+            Self::TimerFinished(indicator) => indicator.draw(painter, rect, scale, alpha, is_light),
+            Self::Link(indicator) => indicator.draw(painter, rect, scale, alpha, is_light),
+            Self::Notification(indicator) => indicator.draw(painter, rect, scale, alpha, is_light),
+            Self::Volume(indicator) => indicator.draw(painter, rect, scale, alpha, is_light),
+            Self::Brightness(indicator) => {
+                indicator.draw_brightness(painter, rect, scale, alpha, is_light)
+            }
         }
     }
 }
@@ -314,9 +316,9 @@ impl CompactOverlay {
         }
     }
 
-    pub fn draw(&self, painter: Painter<'_>, rect: Rect, scale: f32, alpha: f32) {
+    pub fn draw(&self, painter: Painter<'_>, rect: Rect, scale: f32, alpha: f32, is_light: bool) {
         if let Some(overlay) = self.active() {
-            overlay.draw(painter, rect, scale, alpha);
+            overlay.draw(painter, rect, scale, alpha, is_light);
         }
     }
 

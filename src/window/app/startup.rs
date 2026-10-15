@@ -94,7 +94,8 @@ impl App {
             self.renderer = Some(renderer);
             self.create_host_backdrop(&window_ref);
             let is_light = window().theme(id) == Some(Theme::Light);
-            self.is_light_theme = is_light;
+            self.is_system_light = is_light;
+            self.is_light_theme = self.resolve_is_light_theme();
             self.update_v2_host_state("", "", false);
             if let Some(host) = &self.plugin_host {
                 for plugin in crate::plugin::builtin_plugins() {

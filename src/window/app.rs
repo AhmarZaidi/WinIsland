@@ -158,6 +158,7 @@ pub struct App {
     v2_album_art_hash: Cell<Option<u64>>,
     v2_settings_revision: u64,
     plugin_media_source: Option<PluginMediaSource>,
+    is_system_light: bool,
     is_light_theme: bool,
     pending_install: Job<InstallResult>,
     marketplace_catalog: Option<MarketplaceCatalog>,
@@ -307,6 +308,7 @@ impl Default for App {
             v2_album_art_hash: Cell::new(None),
             v2_settings_revision: 0,
             plugin_media_source: None,
+            is_system_light: false,
             is_light_theme: false,
             pending_install: Job::idle(),
             marketplace_catalog: None,
@@ -586,6 +588,14 @@ struct IslandLayout {
 }
 
 impl App {
+    pub(super) fn resolve_is_light_theme(&self) -> bool {
+        match self.config.settings_theme.as_str() {
+            "light" => true,
+            "dark" => false,
+            _ => self.is_system_light,
+        }
+    }
+
     fn current_media_info(&self) -> &MediaInfo {
         self.plugin_media_source
             .as_ref()

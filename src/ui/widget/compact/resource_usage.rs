@@ -9,10 +9,10 @@ use winisland_render::{Angle, FontStyle, Painter, Point, Radius, Rect, Rgba, Str
 
 const RING_LABEL_GAP: f32 = 4.0;
 
-pub(super) fn draw(painter: Painter<'_>, rect: Rect, scale: f32, alpha: u8) {
+pub(super) fn draw(painter: Painter<'_>, rect: Rect, scale: f32, alpha: u8, text_color: Rgba) {
     with_compact_config(|config| {
         with_resource_usage(config, |usage| {
-            draw_metrics(painter, rect, config, scale, alpha, |metric| {
+            draw_metrics(painter, rect, config, scale, alpha, text_color, |metric| {
                 usage.metric(metric)
             });
         });
@@ -25,6 +25,7 @@ pub(crate) fn draw_metrics<'a>(
     metrics: &[ResourceMetricConfig],
     scale: f32,
     alpha: u8,
+    text_color: Rgba,
     usage: impl Fn(&ResourceMetricConfig) -> MetricUsage<'a>,
 ) {
     let enabled: Vec<_> = visible_metrics(metrics).collect();
@@ -45,10 +46,20 @@ pub(crate) fn draw_metrics<'a>(
         let bounds = Rect::from_xywh(x, rect.top, metric_width, rect.height());
         x += metric_width + gap * fit;
         let label = metric_label(metric, gpu_count);
-        draw_metric(painter, bounds, metric, &label, usage(metric), scale, alpha);
+        draw_metric(
+            painter,
+            bounds,
+            metric,
+            &label,
+            usage(metric),
+            scale,
+            alpha,
+            text_color,
+        );
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_metric(
     painter: Painter<'_>,
     rect: Rect,
@@ -57,20 +68,21 @@ fn draw_metric(
     usage: MetricUsage<'_>,
     scale: f32,
     alpha: u8,
+    text_color: Rgba,
 ) {
     let save_count = painter.save();
     painter.clip_rect(rect);
     match usage {
-        MetricUsage::Rates { upload, download } => {
-            draw_rates(painter, rect, config, upload, download, scale, alpha)
-        }
+        MetricUsage::Rates { upload, download } => draw_rates(
+            painter, rect, config, upload, download, scale, alpha, text_color,
+        ),
         MetricUsage::Percent { value, text } => match config.style {
-            ResourceMetricStyle::Bar => {
-                draw_bar(painter, rect, config, label, value, text, scale, alpha)
-            }
-            ResourceMetricStyle::Ring => {
-                draw_ring(painter, rect, config, label, value, text, scale, alpha)
-            }
+            ResourceMetricStyle::Bar => draw_bar(
+                painter, rect, config, label, value, text, scale, alpha, text_color,
+            ),
+            ResourceMetricStyle::Ring => draw_ring(
+                painter, rect, config, label, value, text, scale, alpha, text_color,
+            ),
         },
     }
     painter.restore_to(save_count);
@@ -86,6 +98,7 @@ fn draw_bar(
     text: &str,
     scale: f32,
     alpha: u8,
+    text_color: Rgba,
 ) {
     let value = usage.unwrap_or_default();
     let accent = usage_color(metric_color(config.color), value);
@@ -97,11 +110,12 @@ fn draw_bar(
     let mut value_size = (8.5 * scale).min(rect.width() * 0.28).max(5.5);
     let track_h = (2.0 * scale).max(1.5);
     let track = Rect::from_xywh(left, baseline + 4.5 * scale, width, track_h);
-    painter.fill_round_rect(
-        track,
-        Radius::uniform(track_h / 2.0),
-        Rgba::from_argb((alpha as f32 * 0.13) as u8, 255, 255, 255),
-    );
+    let track_bg = if text_color.r() < 128 {
+        Rgba::from_argb((alpha as f32 * 0.12) as u8, 0, 0, 0)
+    } else {
+        Rgba::from_argb((alpha as f32 * 0.13) as u8, 255, 255, 255)
+    };
+    painter.fill_round_rect(track, Radius::uniform(track_h / 2.0), track_bg);
     if usage.is_some() && value > 0.0 {
         let fill_w = (track.width() * value).max(track_h).min(track.width());
         painter.fill_round_rect(
@@ -135,7 +149,7 @@ fn draw_bar(
         y: baseline,
         size: value_size,
         bold: true,
-        color: Rgba::from_argb(alpha, 255, 255, 255),
+        color: text_color.with_alpha(alpha),
         blur: None,
     });
 }
@@ -150,6 +164,7 @@ fn draw_ring(
     text: &str,
     scale: f32,
     alpha: u8,
+    text_color: Rgba,
 ) {
     let value = usage.unwrap_or_default();
     let accent = usage_color(metric_color(config.color), value);
@@ -173,12 +188,12 @@ fn draw_ring(
         diameter,
         diameter,
     );
-    painter.stroke_circle(
-        center,
-        diameter / 2.0,
-        stroke_width,
-        Rgba::from_argb((alpha as f32 * 0.14) as u8, 255, 255, 255),
-    );
+    let ring_bg = if text_color.r() < 128 {
+        Rgba::from_argb((alpha as f32 * 0.12) as u8, 0, 0, 0)
+    } else {
+        Rgba::from_argb((alpha as f32 * 0.14) as u8, 255, 255, 255)
+    };
+    painter.stroke_circle(center, diameter / 2.0, stroke_width, ring_bg);
     if usage.is_some() && value > 0.0 {
         painter.stroke_arc(
             ring,
@@ -203,7 +218,7 @@ fn draw_ring(
         y: center.y + value_size * 0.32,
         size: value_size,
         bold: true,
-        color: Rgba::from_argb(alpha, 255, 255, 255),
+        color: text_color.with_alpha(alpha),
         blur: None,
     });
     fonts.draw_text_cached(DrawTextCachedParams {
@@ -218,6 +233,7 @@ fn draw_ring(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_rates(
     painter: Painter<'_>,
     rect: Rect,
@@ -226,6 +242,7 @@ fn draw_rates(
     download: RateUsage<'_>,
     scale: f32,
     alpha: u8,
+    text_color: Rgba,
 ) {
     let accent = alpha_color(metric_color(config.color), (alpha as f32 * 0.92) as u8);
     let fonts = FontManager::global();
@@ -256,6 +273,11 @@ fn draw_rates(
     let line_gap = 2.0 * scale;
     let cap = value_size * 0.72;
     let first_baseline = rect.center_y() - line_gap / 2.0;
+    let unit_color = if text_color.r() < 128 {
+        Rgba::from_argb((alpha as f32 * 0.65) as u8, 60, 60, 65)
+    } else {
+        Rgba::from_argb((alpha as f32 * 0.6) as u8, 255, 255, 255)
+    };
     for (rate, upward, baseline) in [
         (upload, true, first_baseline),
         (download, false, first_baseline + line_gap + cap),
@@ -275,7 +297,7 @@ fn draw_rates(
             y: baseline,
             size: value_size,
             bold: true,
-            color: Rgba::from_argb(alpha, 255, 255, 255),
+            color: text_color.with_alpha(alpha),
             blur: None,
         });
         let value_w = fonts.measure_text_cached(rate.value, value_size, FontStyle::bold());
@@ -286,7 +308,7 @@ fn draw_rates(
             y: baseline,
             size: unit_size,
             bold: false,
-            color: Rgba::from_argb((alpha as f32 * 0.6) as u8, 255, 255, 255),
+            color: unit_color,
             blur: None,
         });
     }

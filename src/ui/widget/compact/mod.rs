@@ -162,6 +162,7 @@ pub(crate) fn draw(
     scale: f32,
     alpha: u8,
     has_mini_content: bool,
+    text_color: Rgba,
 ) {
     if !layout.iter().any(|entry| entry.widget.is_some()) {
         return;
@@ -174,6 +175,7 @@ pub(crate) fn draw(
             rect,
             scale,
             alpha,
+            text_color,
         );
         let right_widgets = widgets(layout, CompactWidgetAlignment::Center)
             .chain(widgets(layout, CompactWidgetAlignment::Right));
@@ -186,8 +188,9 @@ pub(crate) fn draw(
             rect,
             scale,
             alpha,
+            text_color,
         );
-        draw_content_separators(painter, layout, rect, scale, alpha);
+        draw_content_separators(painter, layout, rect, scale, alpha, text_color);
     } else {
         let logical_width = rect.width() / scale.max(f32::EPSILON);
         draw_strip(
@@ -198,6 +201,7 @@ pub(crate) fn draw(
             rect,
             scale,
             alpha,
+            text_color,
         );
         draw_strip(
             painter,
@@ -207,6 +211,7 @@ pub(crate) fn draw(
             rect,
             scale,
             alpha,
+            text_color,
         );
         draw_strip(
             painter,
@@ -216,6 +221,7 @@ pub(crate) fn draw(
             rect,
             scale,
             alpha,
+            text_color,
         );
     }
 }
@@ -227,6 +233,7 @@ fn draw_strip(
     rect: Rect,
     scale: f32,
     alpha: u8,
+    text_color: Rgba,
 ) {
     let mut widgets = widgets.peekable();
     while let Some(widget) = widgets.next() {
@@ -237,23 +244,43 @@ fn draw_strip(
             Rect::from_xywh(x, rect.top, width, rect.height()),
             scale,
             alpha,
+            text_color,
         );
         x += width;
         if widgets.peek().is_some() {
-            draw_separator(painter, x + CONTENT_GAP * scale / 2.0, rect, scale, alpha);
+            draw_separator(
+                painter,
+                x + CONTENT_GAP * scale / 2.0,
+                rect,
+                scale,
+                alpha,
+                text_color,
+            );
             x += CONTENT_GAP * scale;
         }
     }
 }
 
-fn draw_separator(painter: Painter<'_>, x: f32, rect: Rect, scale: f32, alpha: u8) {
+fn draw_separator(
+    painter: Painter<'_>,
+    x: f32,
+    rect: Rect,
+    scale: f32,
+    alpha: u8,
+    text_color: Rgba,
+) {
     let top = rect.top + rect.height() * 0.25;
     let bottom = rect.bottom - rect.height() * 0.25;
+    let color = if text_color.r() < 128 {
+        Rgba::from_argb((alpha as f32 * 0.12) as u8, 0, 0, 0)
+    } else {
+        Rgba::from_argb((alpha as f32 * 0.14) as u8, 255, 255, 255)
+    };
     painter.stroke_line(
         Point::new(x, top),
         Point::new(x, bottom),
         scale.max(1.0),
-        Rgba::from_argb((alpha as f32 * 0.14) as u8, 255, 255, 255),
+        color,
         StrokeCap::Butt,
     );
 }
@@ -264,6 +291,7 @@ fn draw_content_separators(
     rect: Rect,
     scale: f32,
     alpha: u8,
+    text_color: Rgba,
 ) {
     let left_width = extension_width(widgets(layout, CompactWidgetAlignment::Left));
     let right_width = extension_width(
@@ -277,6 +305,7 @@ fn draw_content_separators(
             rect,
             scale,
             alpha,
+            text_color,
         );
     }
     if right_width > 0.0 {
@@ -286,6 +315,7 @@ fn draw_content_separators(
             rect,
             scale,
             alpha,
+            text_color,
         );
     }
 }
@@ -296,10 +326,13 @@ pub(crate) fn draw_widget(
     rect: Rect,
     scale: f32,
     alpha: u8,
+    text_color: Rgba,
 ) {
     match widget {
-        CompactWidgetKind::Time => time::draw(painter, rect, scale, alpha),
-        CompactWidgetKind::ResourceUsage => resource_usage::draw(painter, rect, scale, alpha),
+        CompactWidgetKind::Time => time::draw(painter, rect, scale, alpha, text_color),
+        CompactWidgetKind::ResourceUsage => {
+            resource_usage::draw(painter, rect, scale, alpha, text_color)
+        }
     }
 }
 

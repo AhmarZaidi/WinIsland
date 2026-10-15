@@ -902,6 +902,7 @@ fn draw_compact_library_tile(
         ),
         preview_scale,
         255,
+        Rgba::WHITE,
     );
     painter.restore();
 }
@@ -997,6 +998,7 @@ fn draw_compact_widget_preview(params: WidgetPreviewParams<'_>) {
             Rect::from_xywh(x, y, width, height),
             geometry.cap_scale,
             255,
+            Rgba::WHITE,
         );
         painter.restore();
         if compact_widget_preview_hover_slot == Some(entry.position()) {

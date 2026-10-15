@@ -318,6 +318,7 @@ impl SettingsApp {
                 Rect::from_xywh(x, y, width, height),
                 1.0,
                 255,
+                Rgba::WHITE,
             );
             return;
         }

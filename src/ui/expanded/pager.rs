@@ -205,6 +205,7 @@ pub struct PagerParams<'a> {
     pub host_blur: bool,
     pub backdrop: Option<&'a Image>,
     pub liquid: Option<(&'a Backdrop, crate::ui::island::LiquidOptics)>,
+    pub is_light: bool,
 }
 
 pub fn draw(params: PagerParams<'_>) {
@@ -221,6 +222,7 @@ pub fn draw(params: PagerParams<'_>) {
         host_blur,
         backdrop,
         liquid,
+        is_light,
     } = params;
     if alpha <= 0.01 {
         return;
@@ -228,14 +230,21 @@ pub fn draw(params: PagerParams<'_>) {
     let alpha = alpha.clamp(0.0, 1.0);
     let close_hover = close_hover.clamp(0.0, 1.0);
     let layout = visible_layout(island, count, scale, above, alpha, bar_hover, close_hover);
+    let (dot_color, cross_color) = if is_light {
+        (Rgba::BLACK, Rgba::BLACK)
+    } else {
+        (Rgba::WHITE, Rgba::WHITE)
+    };
     if let Some(bar) = layout.bar {
-        draw_surface(painter, bar, scale, alpha, host_blur, backdrop, liquid);
+        draw_surface(
+            painter, bar, scale, alpha, host_blur, backdrop, liquid, is_light,
+        );
         for (dot, weight) in dots(bar, count, position, scale) {
             let dot_alpha = INACTIVE_DOT_ALPHA + (1.0 - INACTIVE_DOT_ALPHA) * weight;
             painter.fill_round_rect(
                 dot,
                 Radius::uniform(dot.height() / 2.0),
-                Rgba::WHITE.with_alpha_f(dot_alpha * alpha),
+                dot_color.with_alpha_f(dot_alpha * alpha),
             );
         }
     }
@@ -247,13 +256,14 @@ pub fn draw(params: PagerParams<'_>) {
         host_blur,
         backdrop,
         liquid,
+        is_light,
     );
     if close_hover <= 0.01 {
         return;
     }
     let center = Point::new(layout.close.center_x(), layout.close.center_y());
     let arm = CLOSE_ARM * scale * (0.6 + 0.4 * close_hover);
-    let cross = Rgba::WHITE.with_alpha_f(0.9 * alpha * close_hover);
+    let cross = cross_color.with_alpha_f(0.9 * alpha * close_hover);
     for direction in [1.0, -1.0] {
         painter.stroke_line(
             Point::new(center.x - arm, center.y - arm * direction),
@@ -265,6 +275,7 @@ pub fn draw(params: PagerParams<'_>) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_surface(
     painter: Painter<'_>,
     rect: Rect,
@@ -273,6 +284,7 @@ fn draw_surface(
     host_blur: bool,
     backdrop: Option<&Image>,
     liquid: Option<(&Backdrop, crate::ui::island::LiquidOptics)>,
+    is_light: bool,
 ) {
     let radius = rect.height() / 2.0;
     let path = Path::continuous_rounded_rect(rect, radius);
@@ -317,23 +329,44 @@ fn draw_surface(
                 .with_sampling(Sampling::LinearNone)
                 .with_alpha_f(alpha),
         );
-        painter.fill_rect(rect, Rgba::from_rgb(20, 20, 24).with_alpha_f(0.5 * alpha));
+        let overlay = if is_light {
+            Rgba::from_rgb(240, 240, 245).with_alpha_f(0.5 * alpha)
+        } else {
+            Rgba::from_rgb(20, 20, 24).with_alpha_f(0.5 * alpha)
+        };
+        painter.fill_rect(rect, overlay);
     } else if host_blur {
-        painter.fill_rect(rect, Rgba::from_rgb(12, 12, 16).with_alpha_f(0.38 * alpha));
+        let fill = if is_light {
+            Rgba::from_rgb(250, 250, 255).with_alpha_f(0.5 * alpha)
+        } else {
+            Rgba::from_rgb(12, 12, 16).with_alpha_f(0.38 * alpha)
+        };
+        painter.fill_rect(rect, fill);
     } else {
-        painter.fill_rect(rect, Rgba::from_rgb(22, 22, 26).with_alpha_f(0.72 * alpha));
+        let fill = if is_light {
+            Rgba::from_rgb(240, 240, 244).with_alpha_f(0.85 * alpha)
+        } else {
+            Rgba::from_rgb(22, 22, 26).with_alpha_f(0.72 * alpha)
+        };
+        painter.fill_rect(rect, fill);
     }
-    painter.fill_path_blurred(
-        &path,
-        Rgba::WHITE.with_alpha_f(0.06 * alpha),
-        BlurSpec::uniform(radius * 0.6),
-    );
+    let inner_glow = if is_light {
+        Rgba::BLACK.with_alpha_f(0.03 * alpha)
+    } else {
+        Rgba::WHITE.with_alpha_f(0.06 * alpha)
+    };
+    painter.fill_path_blurred(&path, inner_glow, BlurSpec::uniform(radius * 0.6));
     painter.restore();
 
+    let border_color = if is_light {
+        Rgba::BLACK.with_alpha_f(0.12 * alpha)
+    } else {
+        Rgba::WHITE.with_alpha_f(0.12 * alpha)
+    };
     painter.stroke_round_rect(
         rect.inset(0.5),
         Radius::uniform(radius - 0.5),
         1.0,
-        Rgba::WHITE.with_alpha_f(0.12 * alpha),
+        border_color,
     );
 }

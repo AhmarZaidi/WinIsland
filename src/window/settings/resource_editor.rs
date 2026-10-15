@@ -939,7 +939,15 @@ impl SettingsApp {
                 pill.right - 14.0 * scale,
                 pill.bottom - 3.0 * scale,
             );
-            draw_compact_metrics(painter, inner, metrics, scale, 255, preview_usage);
+            draw_compact_metrics(
+                painter,
+                inner,
+                metrics,
+                scale,
+                255,
+                Rgba::WHITE,
+                preview_usage,
+            );
         }
         painter.restore_to(save_count);
     }

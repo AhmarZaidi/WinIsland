@@ -615,6 +615,7 @@ impl App {
                     let old_system_controls_overlay = self.config.system_controls_overlay;
                     let old_position_x_offset = self.config.position_x_offset;
                     let old_position_y_offset = self.config.position_y_offset;
+                    let old_settings_theme = self.config.settings_theme.clone();
                     let old_notch_mode = self.config.notch_mode;
                     let old_monitor_index = self.config.monitor_index;
                     let page_order_changed = self.config.expanded_page_order
@@ -624,6 +625,19 @@ impl App {
 
                     log::info!("Config changed, reloaded");
                     self.config = current_config;
+                    let new_light = self.resolve_is_light_theme();
+                    if self.is_light_theme != new_light
+                        || old_settings_theme != self.config.settings_theme
+                    {
+                        self.is_light_theme = new_light;
+                        self.update_v2_host_state("", "", false);
+                        if self.tray_installed {
+                            let _ = crate::platform::shell().tray_update(
+                                crate::platform::tray_theme(new_light),
+                                crate::platform::tray_labels(self.visible, self.recorder.is_some()),
+                            );
+                        }
+                    }
                     window_ref.request_redraw();
                     if page_order_changed {
                         self.snap_to_current_page();

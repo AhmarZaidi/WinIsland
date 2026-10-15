@@ -9,18 +9,29 @@ pub(super) struct BackgroundParams<'a> {
     pub(super) island_style: &'a str,
     pub(super) host_backdrop: bool,
     pub(super) media: &'a MediaInfo,
+    pub(super) is_light: bool,
 }
 
 fn draw_solid(painter: Painter<'_>, path: &Path, color: Rgba) {
     painter.fill_path(path, color);
 }
 
-fn draw_effect_base(painter: Painter<'_>, rect: Rect) {
-    painter.fill_rect(rect, Rgba::from_rgb(32, 32, 36));
+fn draw_effect_base(painter: Painter<'_>, rect: Rect, is_light: bool) {
+    let color = if is_light {
+        Rgba::from_rgb(240, 240, 244)
+    } else {
+        Rgba::from_rgb(32, 32, 36)
+    };
+    painter.fill_rect(rect, color);
 }
 
-fn draw_host_glass(painter: Painter<'_>, path: &Path) {
-    draw_solid(painter, path, Rgba::from_argb(150, 10, 10, 14));
+fn draw_host_glass(painter: Painter<'_>, path: &Path, is_light: bool) {
+    let color = if is_light {
+        Rgba::from_argb(180, 255, 255, 255)
+    } else {
+        Rgba::from_argb(150, 10, 10, 14)
+    };
+    draw_solid(painter, path, color);
 }
 
 pub(super) fn draw_background(params: BackgroundParams<'_>) {
@@ -31,9 +42,14 @@ pub(super) fn draw_background(params: BackgroundParams<'_>) {
         island_style,
         host_backdrop,
         media,
+        is_light,
     } = params;
-    let bg_color = Rgba::BLACK;
-    let fallback_color = Rgba::from_argb(205, 32, 32, 36);
+    let bg_color = if is_light { Rgba::WHITE } else { Rgba::BLACK };
+    let fallback_color = if is_light {
+        Rgba::from_argb(235, 245, 245, 248)
+    } else {
+        Rgba::from_argb(205, 32, 32, 36)
+    };
     let bounds = island_path.bounds();
 
     painter.save();
@@ -47,14 +63,14 @@ pub(super) fn draw_background(params: BackgroundParams<'_>) {
         "liquid" => draw_solid(painter, island_path, fallback_color),
         "glass" => {
             if host_backdrop {
-                draw_host_glass(painter, island_path);
+                draw_host_glass(painter, island_path, is_light);
             } else {
                 draw_solid(painter, island_path, fallback_color);
             }
         }
         "dynamic" => {
             if let Some(blurred_cover) = get_blurred_cover_background(media) {
-                draw_effect_base(painter, bounds);
+                draw_effect_base(painter, bounds, is_light);
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
@@ -95,9 +111,14 @@ pub(super) fn draw_background(params: BackgroundParams<'_>) {
                     &ImageOptions::default().with_sampling(Sampling::LinearNone),
                 );
                 painter.restore();
-                painter.fill_rect(bounds, Rgba::from_argb(120, 20, 20, 24));
+                let overlay_color = if is_light {
+                    Rgba::from_argb(120, 240, 240, 245)
+                } else {
+                    Rgba::from_argb(120, 20, 20, 24)
+                };
+                painter.fill_rect(bounds, overlay_color);
             } else if host_backdrop {
-                draw_host_glass(painter, island_path);
+                draw_host_glass(painter, island_path, is_light);
             } else {
                 draw_solid(painter, island_path, bg_color);
             }

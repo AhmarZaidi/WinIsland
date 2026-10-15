@@ -29,12 +29,20 @@ impl App {
                 }
                 PlatformEvent::ThemeChanged { theme, .. } => {
                     let is_light = theme == Theme::Light;
-                    self.is_light_theme = is_light;
+                    self.is_system_light = is_light;
+                    let effective_light = self.resolve_is_light_theme();
+                    let theme_changed = self.is_light_theme != effective_light;
+                    self.is_light_theme = effective_light;
                     win.request_redraw();
-                    log::info!("Window theme changed to {theme:?}");
+                    log::info!(
+                        "Window theme changed to {theme:?}, effective light: {effective_light}"
+                    );
+                    if theme_changed {
+                        self.update_v2_host_state("", "", false);
+                    }
                     if self.tray_installed {
                         let _ = crate::platform::shell().tray_update(
-                            crate::platform::tray_theme(is_light),
+                            crate::platform::tray_theme(effective_light),
                             crate::platform::tray_labels(self.visible, self.recorder.is_some()),
                         );
                     }
@@ -569,6 +577,7 @@ impl App {
                                         surface: &surface,
                                         secondary_task,
                                         notch_mode: self.config.notch_mode,
+                                        is_light: self.is_light_theme,
                                     },
                                 )
                             });

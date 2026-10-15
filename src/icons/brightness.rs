@@ -1,6 +1,6 @@
 use std::cell::LazyCell;
 
-use winisland_render::{Image, ImageOptions, Painter, Point, Rect};
+use winisland_render::{Image, ImageOptions, Painter, Point, Rect, Rgba};
 
 use super::load_glyph;
 
@@ -11,14 +11,21 @@ thread_local! {
     ]);
 }
 
-pub fn draw_brightness_icon(painter: Painter<'_>, center: Point, size: f32, alpha: u8, level: f32) {
+pub fn draw_brightness_icon(
+    painter: Painter<'_>,
+    center: Point,
+    size: f32,
+    alpha: u8,
+    level: f32,
+    color: Rgba,
+) {
     let index = usize::from(level >= 0.5);
     SUN_ICONS.with(|icons| {
         if let Some(icon) = icons[index].as_ref() {
             painter.draw_image(
                 icon,
                 Rect::from_xywh(center.x - size / 2.0, center.y - size / 2.0, size, size),
-                &ImageOptions::default().with_alpha(alpha),
+                &ImageOptions::default().with_alpha(alpha).with_tint(color),
             );
         }
     });

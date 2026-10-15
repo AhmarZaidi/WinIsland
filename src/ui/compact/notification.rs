@@ -197,7 +197,14 @@ impl NotificationIndicator {
         }
     }
 
-    pub(super) fn draw(&self, painter: Painter<'_>, rect: Rect, scale: f32, alpha: f32) {
+    pub(super) fn draw(
+        &self,
+        painter: Painter<'_>,
+        rect: Rect,
+        scale: f32,
+        alpha: f32,
+        is_light: bool,
+    ) {
         let (opacity, offset_y) = self.presentation();
         let alpha = (alpha * opacity * 255.0).round().clamp(0.0, 255.0) as u8;
         if alpha == 0 {
@@ -216,8 +223,22 @@ impl NotificationIndicator {
 
         match &self.icon {
             Some(icon) => draw_notification_icon(painter, icon, rect, scale, alpha),
-            None => draw_default_icon(painter, rect, scale, alpha),
+            None => draw_default_icon(painter, rect, scale, alpha, is_light),
         }
+
+        let (text_color, sec_color, app_name_color) = if is_light {
+            (
+                Rgba::from_rgb(15, 15, 18),
+                Rgba::from_rgb(80, 80, 85),
+                Rgba::from_rgb(100, 100, 105),
+            )
+        } else {
+            (
+                Rgba::WHITE,
+                Rgba::WHITE.with_alpha((alpha as f32 * 0.72) as u8),
+                Rgba::WHITE.with_alpha((alpha as f32 * 0.65) as u8),
+            )
+        };
 
         let top = rect.top;
         if !self.app_name.is_empty() {
@@ -230,7 +251,11 @@ impl NotificationIndicator {
                     y: top + 22.0 * scale,
                     size: 11.0 * scale,
                     bold: false,
-                    color: Rgba::WHITE.with_alpha((alpha as f32 * 0.65) as u8),
+                    color: if is_light {
+                        app_name_color.with_alpha(alpha)
+                    } else {
+                        app_name_color
+                    },
                     blur: None,
                 },
                 content_width,
@@ -253,7 +278,7 @@ impl NotificationIndicator {
                 y: title_y,
                 size: 13.0 * scale,
                 bold: true,
-                color: Rgba::WHITE.with_alpha(alpha),
+                color: text_color.with_alpha(alpha),
                 blur: None,
             },
             content_width,
@@ -269,7 +294,11 @@ impl NotificationIndicator {
                     y: title_y + DETAIL_LINE_GAP * scale,
                     size: 11.0 * scale,
                     bold: false,
-                    color: Rgba::WHITE.with_alpha((alpha as f32 * 0.72) as u8),
+                    color: if is_light {
+                        sec_color.with_alpha(alpha)
+                    } else {
+                        sec_color
+                    },
                     blur: None,
                 },
                 content_width,
@@ -400,7 +429,7 @@ fn draw_notification_icon(
     painter.restore();
 }
 
-fn draw_default_icon(painter: Painter<'_>, rect: Rect, scale: f32, alpha: u8) {
+fn draw_default_icon(painter: Painter<'_>, rect: Rect, scale: f32, alpha: u8, is_light: bool) {
     let size = 42.0 * scale;
     let tile = Rect::from_xywh(
         rect.left + 18.0 * scale,
@@ -408,15 +437,22 @@ fn draw_default_icon(painter: Painter<'_>, rect: Rect, scale: f32, alpha: u8) {
         size,
         size,
     );
-    painter.fill_round_rect(
-        tile,
-        Radius::uniform(11.0 * scale),
-        Rgba::from_rgb(72, 72, 76).with_alpha(alpha),
-    );
+    let tile_color = if is_light {
+        Rgba::from_rgb(225, 225, 230).with_alpha(alpha)
+    } else {
+        Rgba::from_rgb(72, 72, 76).with_alpha(alpha)
+    };
+    painter.fill_round_rect(tile, Radius::uniform(11.0 * scale), tile_color);
     DEFAULT_ICON.with(|icon| {
         if let Some(icon) = icon.as_ref() {
             let height = 22.0 * scale;
             let width = height * DEFAULT_ICON_ASPECT;
+            let mut opts = ImageOptions::default()
+                .with_sampling(Sampling::LinearLinear)
+                .with_alpha(alpha);
+            if is_light {
+                opts = opts.with_tint(Rgba::from_rgb(15, 15, 18));
+            }
             painter.draw_image(
                 icon,
                 Rect::from_xywh(
@@ -425,9 +461,7 @@ fn draw_default_icon(painter: Painter<'_>, rect: Rect, scale: f32, alpha: u8) {
                     width,
                     height,
                 ),
-                &ImageOptions::default()
-                    .with_sampling(Sampling::LinearLinear)
-                    .with_alpha(alpha),
+                &opts,
             );
         }
     });

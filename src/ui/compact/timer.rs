@@ -287,7 +287,14 @@ impl TimerFinishedIndicator {
         )
     }
 
-    pub(super) fn draw(&self, painter: Painter<'_>, rect: Rect, scale: f32, alpha: f32) {
+    pub(super) fn draw(
+        &self,
+        painter: Painter<'_>,
+        rect: Rect,
+        scale: f32,
+        alpha: f32,
+        is_light: bool,
+    ) {
         let (rect, opacity) = self.presentation(rect, scale);
         let opacity = alpha * opacity;
         if opacity <= 0.0 {
@@ -312,18 +319,24 @@ impl TimerFinishedIndicator {
             color,
         );
         let center = Point::new(button.center_x(), button.center_y());
-        painter.fill_circle(
-            center,
-            button.width() / 2.0,
-            Rgba::WHITE.with_alpha_f(opacity * 0.12),
-        );
+        let circle_color = if is_light {
+            Rgba::BLACK.with_alpha_f(opacity * 0.08)
+        } else {
+            Rgba::WHITE.with_alpha_f(opacity * 0.12)
+        };
+        painter.fill_circle(center, button.width() / 2.0, circle_color);
         let arm = 8.0 * scale;
+        let cross_color = if is_light {
+            Rgba::BLACK.with_alpha_f(opacity * 0.65)
+        } else {
+            Rgba::WHITE.with_alpha_f(opacity * 0.65)
+        };
         for direction in [-1.0, 1.0] {
             painter.stroke_line(
                 Point::new(center.x - arm, center.y - direction * arm),
                 Point::new(center.x + arm, center.y + direction * arm),
                 2.2 * scale,
-                Rgba::WHITE.with_alpha_f(opacity * 0.65),
+                cross_color,
                 StrokeCap::Round,
             );
         }

@@ -265,6 +265,12 @@ impl<'a> Painter<'a> {
         } else {
             paint.set_alpha(options.alpha);
         }
+        if let Some(tint) = options.tint {
+            paint.set_color_filter(skia_safe::color_filters::blend(
+                crate::convert::to_skia_color(tint),
+                skia_safe::BlendMode::SrcIn,
+            ));
+        }
         let sampling = to_skia_sampling(options.sampling);
         let source = source.map(to_skia_rect);
         match options.constraint {

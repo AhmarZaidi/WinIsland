@@ -414,12 +414,26 @@ impl VolumeIndicator {
         }
     }
 
-    pub(super) fn draw(&self, painter: Painter<'_>, rect: Rect, scale: f32, alpha: f32) {
-        self.draw_level(painter, rect, scale, alpha, false);
+    pub(super) fn draw(
+        &self,
+        painter: Painter<'_>,
+        rect: Rect,
+        scale: f32,
+        alpha: f32,
+        is_light: bool,
+    ) {
+        self.draw_level(painter, rect, scale, alpha, false, is_light);
     }
 
-    pub(super) fn draw_brightness(&self, painter: Painter<'_>, rect: Rect, scale: f32, alpha: f32) {
-        self.draw_level(painter, rect, scale, alpha, true);
+    pub(super) fn draw_brightness(
+        &self,
+        painter: Painter<'_>,
+        rect: Rect,
+        scale: f32,
+        alpha: f32,
+        is_light: bool,
+    ) {
+        self.draw_level(painter, rect, scale, alpha, true, is_light);
     }
 
     fn draw_level(
@@ -429,11 +443,24 @@ impl VolumeIndicator {
         scale: f32,
         alpha: f32,
         brightness: bool,
+        is_light: bool,
     ) {
         let alpha = (alpha * self.opacity() * 255.0).round().clamp(0.0, 255.0) as u8;
         if alpha == 0 {
             return;
         }
+
+        let (text_color, track_bg_color) = if is_light {
+            (
+                Rgba::from_rgb(15, 15, 18),
+                Rgba::BLACK.with_alpha((alpha as f32 * 0.15) as u8),
+            )
+        } else {
+            (
+                Rgba::WHITE,
+                Rgba::WHITE.with_alpha((alpha as f32 * 0.28) as u8),
+            )
+        };
 
         let center_y = rect.center_y();
         let icon_size = 20.0 * scale;
@@ -444,7 +471,7 @@ impl VolumeIndicator {
             .map_or(self.snapshot.muted, |(level, _)| level <= 0.0)
             || level <= VOLUME_CHANGE_THRESHOLD;
         if brightness {
-            draw_brightness_icon(painter, icon_center, icon_size, alpha, level);
+            draw_brightness_icon(painter, icon_center, icon_size, alpha, level, text_color);
         } else {
             draw_volume_icon(
                 painter,
@@ -452,7 +479,7 @@ impl VolumeIndicator {
                 icon_size,
                 alpha,
                 if muted { 0.0 } else { level },
-                Rgba::WHITE,
+                text_color,
             );
         }
 
@@ -465,7 +492,7 @@ impl VolumeIndicator {
             y: center_y + 4.0 * scale,
             size: label_size,
             bold: false,
-            color: Rgba::WHITE.with_alpha((alpha as f32 * 0.9) as u8),
+            color: text_color.with_alpha((alpha as f32 * 0.9) as u8),
             blur: None,
         });
 
@@ -479,14 +506,14 @@ impl VolumeIndicator {
         painter.fill_round_rect(
             Rect::from_xywh(track_left, track_top, track_width, track_height),
             Radius::uniform(track_height / 2.0),
-            Rgba::WHITE.with_alpha((alpha as f32 * 0.28) as u8),
+            track_bg_color,
         );
 
         if thumb_x > track_left {
             painter.fill_round_rect(
                 Rect::from_xywh(track_left, track_top, thumb_x - track_left, track_height),
                 Radius::uniform(track_height / 2.0),
-                Rgba::WHITE.with_alpha(alpha),
+                text_color.with_alpha(alpha),
             );
         }
     }

@@ -143,6 +143,7 @@ pub struct DrawIslandParams<'a> {
     pub surface: &'a multitask::IslandSurface,
     pub secondary_task: Option<TaskFrame<multitask::activities::Activity>>,
     pub notch_mode: bool,
+    pub is_light: bool,
 }
 
 pub fn expanded_content_alpha(
@@ -263,7 +264,8 @@ fn draw_expanded_shadow(painter: Painter<'_>, params: &DrawIslandParams<'_>, isl
             .max(0.0)
     };
     let sigma = (3.0 * scale).min(margin / 3.0);
-    let alpha = (28.0 * opacity) as u8;
+    let shadow_base_alpha = if params.is_light { 44.0 } else { 28.0 };
+    let alpha = (shadow_base_alpha * opacity) as u8;
     if layout.shadow_static && sigma > 0.0 {
         let key = (
             (bounds.width() * 16.0).round() as i32,
@@ -334,6 +336,7 @@ fn draw_background_layer(
         island_style: params.style.island_style,
         host_backdrop: params.style.host_backdrop,
         media: params.media.backdrop,
+        is_light: params.is_light,
     });
 }
 
@@ -348,6 +351,11 @@ fn draw_expanded_layer(
     let layout = &params.layout;
     let media = &params.media;
     let style = &params.style;
+    let (text_color, text_color_sec) = if params.is_light {
+        (Rgba::from_rgb(15, 15, 18), Rgba::from_argb(180, 60, 60, 65))
+    } else {
+        (Rgba::WHITE, Rgba::WHITE)
+    };
     draw_expanded_content(ExpandedContentParams {
         painter,
         blur_filter,
@@ -371,8 +379,8 @@ fn draw_expanded_layer(
         dt: style.dt,
         expanded_width: style.expanded_width,
         expanded_height: style.expanded_height,
-        text_color: Rgba::WHITE,
-        text_color_sec: Rgba::WHITE,
+        text_color,
+        text_color_sec,
         spectrum_fill,
         widget_layout: style.widget_layout,
         plugin_widget_layout: style.plugin_widget_layout,
@@ -392,6 +400,11 @@ fn draw_compact_layer(
     let layout = &params.layout;
     let lyrics = &params.lyrics;
     let style = &params.style;
+    let text_color = if params.is_light {
+        Rgba::from_rgb(15, 15, 18)
+    } else {
+        Rgba::WHITE
+    };
     let has_mini_content = params.mini_content.is_some();
     let center_occupied = crate::ui::widget::compact::has_center_widget(
         style.compact_widget_layout,
@@ -435,7 +448,7 @@ fn draw_compact_layer(
         lyric_side_gap: lyrics.lyric_side_gap,
         lyric_transition: lyrics.lyric_transition,
         lyric_transition_animation: lyrics.lyric_transition_animation,
-        text_color: Rgba::WHITE,
+        text_color,
     });
     crate::ui::widget::compact::draw(
         painter,
@@ -449,6 +462,7 @@ fn draw_compact_layer(
         layout.compact_scale,
         (alpha * layout.compact_widget_opacity * f32::from(u8::MAX)) as u8,
         has_mini_content,
+        text_color,
     );
     if let Some(host) = style.plugin_host {
         crate::ui::plugin::draw_compact(
@@ -493,6 +507,7 @@ fn draw_pager(painter: Painter<'_>, params: &DrawIslandParams<'_>, rect: Rect, a
             .as_ref()
             .filter(|_| params.style.island_style == LIQUID_STYLE)
             .map(|backdrop| (backdrop, params.style.liquid_optics)),
+        is_light: params.is_light,
     });
 }
 
@@ -521,10 +536,20 @@ fn draw_island_border(painter: Painter<'_>, params: &DrawIslandParams<'_>) {
             layout.island_y + layout.current_h + 1000.0,
         ));
     }
+    let border_color = if params.is_light {
+        let border_alpha = if params.style.island_style == SOLID_STYLE {
+            22
+        } else {
+            28
+        };
+        Rgba::BLACK.with_alpha((border_alpha as f32 * opacity) as u8)
+    } else {
+        Rgba::WHITE.with_alpha((alpha as f32 * opacity) as u8)
+    };
     painter.stroke_path(
         &params.surface.outline,
         BORDER_WIDTH * 2.0,
-        Rgba::WHITE.with_alpha((alpha as f32 * opacity) as u8),
+        border_color,
         winisland_render::StrokeCap::Butt,
         winisland_render::StrokeJoin::Miter,
     );
@@ -615,6 +640,7 @@ fn draw_island_content(
             rect,
             layout.compact_scale,
             1.0 - layout.hide_progress,
+            params.is_light,
         );
     } else {
         draw_compact_layer(

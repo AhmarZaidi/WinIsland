@@ -190,7 +190,14 @@ impl LinkIndicator {
         (enter * exit, (1.0 - enter) * 7.0)
     }
 
-    pub(super) fn draw(&self, painter: Painter<'_>, rect: Rect, scale: f32, alpha: f32) {
+    pub(super) fn draw(
+        &self,
+        painter: Painter<'_>,
+        rect: Rect,
+        scale: f32,
+        alpha: f32,
+        is_light: bool,
+    ) {
         let (opacity, offset_y) = self.presentation();
         let opacity = (alpha * opacity).clamp(0.0, 1.0);
         if opacity <= 0.01 {
@@ -250,13 +257,24 @@ impl LinkIndicator {
         let text_left = icon_center.x + icon_radius + 12.0 * scale;
         let text_width = (button.left - 12.0 * scale - text_left).max(0.0);
         let title = truncated(&tr("link_prompt_title"), 11.0 * scale, false, text_width);
+        let (title_color, host_color) = if is_light {
+            (
+                Rgba::from_rgb(100, 100, 105).with_alpha_f(opacity),
+                Rgba::from_rgb(15, 15, 18).with_alpha_f(opacity),
+            )
+        } else {
+            (
+                Rgba::WHITE.with_alpha_f(0.65 * opacity),
+                Rgba::WHITE.with_alpha_f(opacity),
+            )
+        };
         draw_text(
             painter,
             &title,
             Point::new(text_left, rect.center_y() - 4.0 * scale),
             11.0 * scale,
             false,
-            Rgba::WHITE.with_alpha_f(0.65 * opacity),
+            title_color,
         );
         let host = truncated(&self.host, 14.0 * scale, true, text_width);
         draw_text(
@@ -265,7 +283,7 @@ impl LinkIndicator {
             Point::new(text_left, rect.center_y() + 13.0 * scale),
             14.0 * scale,
             true,
-            Rgba::WHITE.with_alpha_f(opacity),
+            host_color,
         );
 
         painter.fill_round_rect(
