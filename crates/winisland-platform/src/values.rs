@@ -285,6 +285,18 @@ pub struct VolumeKeyEvent {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BrightnessKey {
+    Up,
+    Down,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BrightnessKeyEvent {
+    pub key: BrightnessKey,
+    pub is_down: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VirtualKey {
     LeftMouseButton,
 }

@@ -1,11 +1,13 @@
 use crate::{BrightnessSnapshot, GpuProfile, MonitorInfo, PlatformError, Point, Rect};
 
 /// Worker-owned brightness state. Missing WMI control is reflected in snapshots.
-pub trait BrightnessFeed {
+pub trait BrightnessFeed: Send + Sync {
     /// Returns the latest cached brightness and availability state without blocking.
     fn snapshot(&self) -> BrightnessSnapshot;
     /// Requests a level change; unavailable controls ignore the request.
     fn set_level(&self, level: f32);
+    /// Steps the brightness up or down.
+    fn step(&self, up: bool);
 }
 
 /// Display queries block and should run away from rendering. No returned value owns a

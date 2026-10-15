@@ -52,25 +52,28 @@ pub fn load_config_at(path: &Path) -> AppConfig {
         }
     };
     if let Ok(table) = toml::from_str::<toml::Table>(&content) {
-        if !table.contains_key("system_controls_overlay")
-            && (table.contains_key("replace_native_volume_flyout")
-                || table.contains_key("brightness_overlay_enabled"))
-        {
-            let volume = table
+        if !table.contains_key("volume_control_overlay")
+            && let Some(volume) = table
                 .get("replace_native_volume_flyout")
+                .or_else(|| table.get("system_controls_overlay"))
                 .and_then(toml::Value::as_bool)
-                .unwrap_or(true);
-            let brightness = table
+        {
+            config.volume_control_overlay = volume;
+        }
+        if !table.contains_key("brightness_control_overlay")
+            && let Some(brightness) = table
                 .get("brightness_overlay_enabled")
+                .or_else(|| table.get("system_controls_overlay"))
                 .and_then(toml::Value::as_bool)
-                .unwrap_or(true);
-            config.system_controls_overlay = volume || brightness;
+        {
+            config.brightness_control_overlay = brightness;
         }
         migrated |= [
             "animation_fps",
             "expanded_idle_fps",
             "replace_native_volume_flyout",
             "brightness_overlay_enabled",
+            "system_controls_overlay",
         ]
         .iter()
         .any(|key| table.contains_key(*key));

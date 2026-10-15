@@ -55,9 +55,17 @@ impl SettingsApp {
         );
         page.setting(
             &self.config,
-            AppConfigField::SystemControlsOverlay,
-            (caps.input_hooks && caps.volume_control) || caps.brightness_control,
+            AppConfigField::VolumeControlOverlay,
+            caps.input_hooks && caps.volume_control,
         );
+        page.setting(
+            &self.config,
+            AppConfigField::BrightnessControlOverlay,
+            caps.brightness_control,
+        );
+        if self.config.volume_control_overlay || self.config.brightness_control_overlay {
+            page.setting(&self.config, AppConfigField::ShowSystemControlLabels, true);
+        }
         page.setting(&self.config, AppConfigField::ClipboardLinkPrompt, true);
         page.setting(&self.config, AppConfigField::DeviceStatusIndicators, true);
         if !caps.autostart || !caps.toast_events || !caps.input_hooks || !caps.brightness_control {

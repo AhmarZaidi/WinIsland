@@ -163,9 +163,16 @@ pub struct AppConfig {
     pub notification_display: bool,
     #[setting(toggle)]
     pub device_status_indicators: bool,
+    #[serde(alias = "system_controls_overlay")]
     #[educe(Default = true)]
     #[setting(toggle)]
-    pub system_controls_overlay: bool,
+    pub volume_control_overlay: bool,
+    #[educe(Default = true)]
+    #[setting(toggle)]
+    pub brightness_control_overlay: bool,
+    #[educe(Default = true)]
+    #[setting(toggle)]
+    pub show_system_control_labels: bool,
     #[educe(Default = true)]
     #[setting(toggle, label = "clipboard_link_prompt")]
     pub clipboard_link_prompt: bool,

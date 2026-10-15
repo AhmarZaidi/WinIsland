@@ -254,7 +254,11 @@ impl Default for App {
                 plugin_host.as_ref().map(|host| host.lyrics_bridge()),
             ),
             audio: AudioProcessor::new(),
-            compact_overlay: CompactOverlay::new(config.system_controls_overlay),
+            compact_overlay: CompactOverlay::new(
+                config.volume_control_overlay,
+                config.brightness_control_overlay,
+                config.show_system_control_labels,
+            ),
             smtc_media_info: MediaInfo::default(),
             last_media_title: String::new(),
             cover_hash: 0,

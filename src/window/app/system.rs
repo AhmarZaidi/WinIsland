@@ -612,7 +612,9 @@ impl App {
                     let old_expanded_shape = self.config.expanded_cover_shape.clone();
                     let old_font = self.config.custom_font_path.clone();
                     let old_smtc_enabled = self.config.smtc_enabled;
-                    let old_system_controls_overlay = self.config.system_controls_overlay;
+                    let old_volume_control_overlay = self.config.volume_control_overlay;
+                    let old_brightness_control_overlay = self.config.brightness_control_overlay;
+                    let old_show_system_control_labels = self.config.show_system_control_labels;
                     let old_position_x_offset = self.config.position_x_offset;
                     let old_position_y_offset = self.config.position_y_offset;
                     let old_settings_theme = self.config.settings_theme.clone();
@@ -661,10 +663,17 @@ impl App {
                     self.smtc
                         .set_lyrics_local_dir(self.config.lyrics_local_dir.clone());
                     self.smtc.set_allowed_apps(self.config.smtc_apps.clone());
-                    if old_system_controls_overlay != self.config.system_controls_overlay {
-                        self.compact_overlay.set_system_controls_overlay_enabled(
-                            self.config.system_controls_overlay,
-                        );
+                    if old_volume_control_overlay != self.config.volume_control_overlay {
+                        self.compact_overlay
+                            .set_volume_overlay_enabled(self.config.volume_control_overlay);
+                    }
+                    if old_brightness_control_overlay != self.config.brightness_control_overlay {
+                        self.compact_overlay
+                            .set_brightness_overlay_enabled(self.config.brightness_control_overlay);
+                    }
+                    if old_show_system_control_labels != self.config.show_system_control_labels {
+                        self.compact_overlay
+                            .set_show_control_labels(self.config.show_system_control_labels);
                     }
                     if old_smtc_enabled != self.config.smtc_enabled {
                         self.smtc.set_enabled(self.config.smtc_enabled);

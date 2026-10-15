@@ -257,6 +257,7 @@ pub(super) struct VolumeIndicator {
     display_until: Option<Instant>,
     dragging: bool,
     preview: Option<(f32, Instant)>,
+    show_label: bool,
 }
 
 impl Default for VolumeIndicator {
@@ -274,6 +275,7 @@ impl Default for VolumeIndicator {
             display_until: None,
             dragging: false,
             preview: None,
+            show_label: true,
         }
     }
 }
@@ -383,6 +385,10 @@ impl VolumeIndicator {
         changed.then_some(level)
     }
 
+    pub(super) fn set_show_label(&mut self, show: bool) {
+        self.show_label = show;
+    }
+
     pub(super) fn finish_drag(&mut self) -> bool {
         if !self.dragging {
             return false;
@@ -393,12 +399,16 @@ impl VolumeIndicator {
     }
 
     fn track_rect(&self, rect: Rect, scale: f32) -> Rect {
-        let label_width = FontManager::global().measure_text_cached(
-            &self.label,
-            12.0 * scale,
-            FontStyle::normal(),
-        );
-        let left = rect.left + (37.0 + 11.0) * scale + label_width;
+        let left = if self.show_label {
+            let label_width = FontManager::global().measure_text_cached(
+                &self.label,
+                12.0 * scale,
+                FontStyle::normal(),
+            );
+            rect.left + (37.0 + 11.0) * scale + label_width
+        } else {
+            rect.left + 37.0 * scale
+        };
         Rect::from_xywh(
             left,
             rect.center_y() - 2.0 * scale,
@@ -483,18 +493,20 @@ impl VolumeIndicator {
             );
         }
 
-        let label_size = 12.0 * scale;
-        let label_x = rect.left + 37.0 * scale;
-        FontManager::global().draw_text_cached(DrawTextCachedParams {
-            painter,
-            text: &self.label,
-            x: label_x,
-            y: center_y + 4.0 * scale,
-            size: label_size,
-            bold: false,
-            color: text_color.with_alpha((alpha as f32 * 0.9) as u8),
-            blur: None,
-        });
+        if self.show_label {
+            let label_size = 12.0 * scale;
+            let label_x = rect.left + 37.0 * scale;
+            FontManager::global().draw_text_cached(DrawTextCachedParams {
+                painter,
+                text: &self.label,
+                x: label_x,
+                y: center_y + 4.0 * scale,
+                size: label_size,
+                bold: false,
+                color: text_color.with_alpha((alpha as f32 * 0.9) as u8),
+                blur: None,
+            });
+        }
 
         let track = self.track_rect(rect, scale);
         let track_left = track.left;
