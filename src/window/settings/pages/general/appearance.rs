@@ -17,6 +17,10 @@ impl SettingsApp {
         page.section(tr("section_appearance"));
         page.group_start();
         page.setting(&self.config, AppConfigField::NotchMode, true);
+        page.setting(&self.config, AppConfigField::ScreenRoundedCorners, true);
+        if self.config.screen_rounded_corners {
+            page.setting(&self.config, AppConfigField::ScreenCornerRadius, true);
+        }
         page.setting(&self.config, AppConfigField::CompactScale, true);
         page.setting(&self.config, AppConfigField::ExpandedScale, true);
         page.setting(&self.config, AppConfigField::BaseWidth, true);

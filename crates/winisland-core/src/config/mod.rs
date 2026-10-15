@@ -29,6 +29,11 @@ pub const WINDOW_TITLE: &str = "WinIsland";
 pub struct AppConfig {
     #[setting(toggle)]
     pub notch_mode: bool,
+    #[setting(toggle)]
+    pub screen_rounded_corners: bool,
+    #[educe(Default = 10.0)]
+    #[setting(number(min = 1.0, max = 50.0, step = 1.0))]
+    pub screen_corner_radius: f32,
     #[serde(alias = "global_scale")]
     #[educe(Default = 1.0)]
     #[setting(number(min = 0.5, max = 5.0, step = 0.05, precision = 2))]

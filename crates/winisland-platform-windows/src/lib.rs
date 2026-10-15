@@ -13,6 +13,7 @@ mod media;
 mod metrics;
 mod notify;
 mod process;
+mod screen_corners;
 mod shell;
 pub mod window;
 

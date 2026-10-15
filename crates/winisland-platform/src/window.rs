@@ -145,4 +145,15 @@ pub trait WindowSystem {
     fn backdrop_capture_pending(&self, id: WindowId) -> bool;
     /// Stops sampling and restores capture visibility; repeated stops are harmless.
     fn stop_backdrop_capture(&self, id: WindowId);
+    /// Updates screen rounded corners overlay for the target display area.
+    /// If `enabled` is false or radius <= 0, the corners are hidden.
+    fn update_screen_corners(
+        &self,
+        enabled: bool,
+        radius: f32,
+        monitor_pos: (i32, i32),
+        monitor_size: (u32, u32),
+    ) {
+        let _ = (enabled, radius, monitor_pos, monitor_size);
+    }
 }

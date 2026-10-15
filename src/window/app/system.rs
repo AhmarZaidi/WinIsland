@@ -615,6 +615,8 @@ impl App {
                     let old_volume_control_overlay = self.config.volume_control_overlay;
                     let old_brightness_control_overlay = self.config.brightness_control_overlay;
                     let old_show_system_control_labels = self.config.show_system_control_labels;
+                    let old_screen_rounded_corners = self.config.screen_rounded_corners;
+                    let old_screen_corner_radius = self.config.screen_corner_radius;
                     let old_position_x_offset = self.config.position_x_offset;
                     let old_position_y_offset = self.config.position_y_offset;
                     let old_settings_theme = self.config.settings_theme.clone();
@@ -655,7 +657,23 @@ impl App {
                     if let Some(monitor) =
                         Self::get_target_monitor(window_ref, self.config.monitor_index)
                     {
-                        self.migrate_legacy_dock_position(monitor.position(), monitor.size());
+                        let mon_size = monitor.size();
+                        let mon_pos = monitor.position();
+                        self.geom.monitor_size = (mon_size.width, mon_size.height);
+                        self.geom.monitor_pos = (mon_pos.x, mon_pos.y);
+                        self.migrate_legacy_dock_position(mon_pos, mon_size);
+                    }
+                    if old_screen_rounded_corners != self.config.screen_rounded_corners
+                        || (old_screen_corner_radius - self.config.screen_corner_radius).abs()
+                            > 0.01
+                        || old_monitor_index != self.config.monitor_index
+                    {
+                        window().update_screen_corners(
+                            self.config.screen_rounded_corners,
+                            self.config.screen_corner_radius,
+                            self.geom.monitor_pos,
+                            self.geom.monitor_size,
+                        );
                     }
                     self.smtc.set_lyrics_mode(self.config.lyrics_mode.clone());
                     self.smtc

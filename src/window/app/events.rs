@@ -71,9 +71,18 @@ impl App {
                     let _ = win.request_inner_size(expected);
                     if let Some(monitor) = Self::get_target_monitor(&win, self.config.monitor_index)
                     {
-                        let (x, y) =
-                            self.compute_window_position(monitor.position(), monitor.size());
+                        let mon_size = monitor.size();
+                        let mon_pos = monitor.position();
+                        self.geom.monitor_size = (mon_size.width, mon_size.height);
+                        self.geom.monitor_pos = (mon_pos.x, mon_pos.y);
+                        let (x, y) = self.compute_window_position(mon_pos, mon_size);
                         self.set_configured_window_position(&win, x, y);
+                        window().update_screen_corners(
+                            self.config.screen_rounded_corners,
+                            self.config.screen_corner_radius,
+                            self.geom.monitor_pos,
+                            self.geom.monitor_size,
+                        );
                     }
                 }
                 PlatformEvent::Moved { position, .. } => {

@@ -60,6 +60,12 @@ impl App {
                 self.migrate_legacy_dock_position(mon_pos, mon_size);
                 let (position_x, position_y) = self.compute_window_position(mon_pos, mon_size);
                 self.set_configured_window_position(&window_ref, position_x, position_y);
+                window().update_screen_corners(
+                    self.config.screen_rounded_corners,
+                    self.config.screen_corner_radius,
+                    self.geom.monitor_pos,
+                    self.geom.monitor_size,
+                );
                 log::info!(
                     "Monitor: {}x{} @ ({}, {}); window @ ({}, {})",
                     mon_size.width,

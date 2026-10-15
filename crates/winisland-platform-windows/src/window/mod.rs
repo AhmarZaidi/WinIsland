@@ -551,6 +551,7 @@ impl WindowSystem for WindowsWindowSystem {
             }
             window.set_skip_taskbar(styles.skip_taskbar);
         }
+        crate::screen_corners::enforce_topmost();
     }
 
     fn set_topmost(&self, id: WindowId, topmost: bool) {
@@ -740,5 +741,15 @@ impl WindowSystem for WindowsWindowSystem {
                 .and_then(|record| record.backdrop_capture.take())
         });
         drop(capture);
+    }
+
+    fn update_screen_corners(
+        &self,
+        enabled: bool,
+        radius: f32,
+        monitor_pos: (i32, i32),
+        monitor_size: (u32, u32),
+    ) {
+        crate::screen_corners::update_corners(enabled, radius, monitor_pos, monitor_size);
     }
 }
