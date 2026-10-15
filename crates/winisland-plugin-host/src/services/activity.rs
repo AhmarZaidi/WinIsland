@@ -46,7 +46,7 @@ fn validate_surfaces(state: &ServiceState, spec: &ActivitySpecV2) -> Result<(), 
             .widgets
             .get(&id.get())
             .ok_or(PluginStatus::StaleHandle)?;
-        if record.disabled || !record.surface.is_some_and(|surface| surface.kind == kind) {
+        if record.disabled || record.surface.is_none_or(|surface| surface.kind != kind) {
             return Err(PluginStatus::InvalidArgument);
         }
     }

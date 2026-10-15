@@ -165,6 +165,108 @@ impl Path {
         path
     }
 
+    pub fn notch(rect: Rect, bottom_radius: f32, ear_radius: f32) -> Self {
+        if !rect.is_finite() || rect.width() <= 0.0 || rect.height() <= 0.0 {
+            return Self::default();
+        }
+
+        let mut ear_radius = ear_radius.max(0.0);
+        let mut bottom_radius = bottom_radius.max(0.0).min(rect.width() / 2.0);
+
+        if ear_radius + bottom_radius > rect.height() && (ear_radius + bottom_radius) > 0.0 {
+            let factor = rect.height() / (ear_radius + bottom_radius);
+            bottom_radius *= factor;
+            ear_radius *= factor;
+        }
+
+        let key = NotchPathKey {
+            left: rect.left.to_bits(),
+            top: rect.top.to_bits(),
+            right: rect.right.to_bits(),
+            bottom: rect.bottom.to_bits(),
+            bottom_radius: bottom_radius.to_bits(),
+            ear_radius: ear_radius.to_bits(),
+        };
+        if let Some(path) = NOTCH_PATH_CACHE.with(|cache| {
+            cache
+                .borrow()
+                .iter()
+                .find(|entry| entry.key == key)
+                .map(|entry| entry.path.clone())
+        }) {
+            return path;
+        }
+
+        let mut builder = PathBuilder::new();
+        const KAPPA: f32 = 0.552_284_8;
+        let ear_k = KAPPA * ear_radius;
+        let bot_k = KAPPA * bottom_radius;
+
+        let x = rect.left;
+        let y = rect.top;
+        let w = rect.width();
+        let bottom = rect.bottom;
+
+        builder.move_to(Point::new(x - ear_radius, y - 1.0));
+        builder.line_to(Point::new(x - ear_radius, y));
+
+        if ear_radius > 0.0 {
+            builder.cubic_to(
+                Point::new(x - ear_radius + ear_k, y),
+                Point::new(x, y + ear_radius - ear_k),
+                Point::new(x, y + ear_radius),
+            );
+        } else {
+            builder.line_to(Point::new(x, y));
+        }
+
+        builder.line_to(Point::new(x, bottom - bottom_radius));
+
+        if bottom_radius > 0.0 {
+            builder.cubic_to(
+                Point::new(x, bottom - bottom_radius + bot_k),
+                Point::new(x + bottom_radius - bot_k, bottom),
+                Point::new(x + bottom_radius, bottom),
+            );
+        }
+
+        builder.line_to(Point::new(x + w - bottom_radius, bottom));
+
+        if bottom_radius > 0.0 {
+            builder.cubic_to(
+                Point::new(x + w - bottom_radius + bot_k, bottom),
+                Point::new(x + w, bottom - bottom_radius + bot_k),
+                Point::new(x + w, bottom - bottom_radius),
+            );
+        }
+
+        builder.line_to(Point::new(x + w, y + ear_radius));
+
+        if ear_radius > 0.0 {
+            builder.cubic_to(
+                Point::new(x + w, y + ear_radius - ear_k),
+                Point::new(x + w + ear_radius - ear_k, y),
+                Point::new(x + w + ear_radius, y),
+            );
+        } else {
+            builder.line_to(Point::new(x + w, y));
+        }
+
+        builder.line_to(Point::new(x + w + ear_radius, y - 1.0));
+        builder.close();
+
+        let path = builder.detach();
+        NOTCH_PATH_CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            cache.push_front(CachedNotchPath {
+                key,
+                path: path.clone(),
+            });
+            cache.truncate(PATH_CACHE_CAPACITY);
+        });
+        path
+    }
+
     pub(crate) fn as_skia(&self) -> &SkPath {
         &self.inner
     }
@@ -378,4 +480,21 @@ struct CachedPath {
 
 thread_local! {
     static PATH_CACHE: RefCell<VecDeque<CachedPath>> = const { RefCell::new(VecDeque::new()) };
+    static NOTCH_PATH_CACHE: RefCell<VecDeque<CachedNotchPath>> =
+        const { RefCell::new(VecDeque::new()) };
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct NotchPathKey {
+    left: u32,
+    top: u32,
+    right: u32,
+    bottom: u32,
+    bottom_radius: u32,
+    ear_radius: u32,
+}
+
+struct CachedNotchPath {
+    key: NotchPathKey,
+    path: Path,
 }

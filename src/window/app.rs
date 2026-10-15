@@ -715,7 +715,7 @@ impl App {
         self.hide.manual = false;
         self.hide.notification_reveal = false;
         self.hide.overlay_reveal = false;
-        self.springs.hide.velocity = -0.65;
+        self.springs.hide.velocity = if self.config.notch_mode { 0.0 } else { -0.65 };
         self.idle_timer = Instant::now();
     }
 }

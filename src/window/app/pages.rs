@@ -1,7 +1,6 @@
 use std::time::{Duration, Instant};
 
 use crate::ui::expanded::pager::{self, ExpandedPage, PageAvailability, PagerHit, available_pages};
-use crate::utils::mouse::is_point_in_continuous_rounded_rect;
 use winisland_platform::MouseWheelDelta;
 use winisland_render::{Point, Rect};
 
@@ -269,13 +268,14 @@ impl App {
         let rel_x = px - self.geom.win_x;
         let rel_y = py - self.geom.win_y;
         let layout = self.compute_island_layout();
-        let over_island = is_point_in_continuous_rounded_rect(
-            rel_x as f64,
-            rel_y as f64,
-            layout.current_island_x,
-            layout.current_island_y,
-            self.springs.w.value as f64,
-            self.springs.h.value as f64,
+        let over_island = self.is_point_in_island(
+            (rel_x as f64, rel_y as f64),
+            (
+                layout.current_island_x,
+                layout.current_island_y,
+                self.springs.w.value as f64,
+                self.springs.h.value as f64,
+            ),
             self.springs.r.value as f64,
         );
         if !over_island && !self.pager_contains(rel_x, rel_y, &layout) {

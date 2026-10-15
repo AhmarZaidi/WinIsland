@@ -16,6 +16,7 @@ impl SettingsApp {
         let mut page = SettingsPage::new();
         page.section(tr("section_appearance"));
         page.group_start();
+        page.setting(&self.config, AppConfigField::NotchMode, true);
         page.setting(&self.config, AppConfigField::CompactScale, true);
         page.setting(&self.config, AppConfigField::ExpandedScale, true);
         page.setting(&self.config, AppConfigField::BaseWidth, true);
@@ -23,7 +24,11 @@ impl SettingsApp {
         page.setting(&self.config, AppConfigField::ExpandedWidth, true);
         page.setting(&self.config, AppConfigField::ExpandedHeight, true);
         page.setting(&self.config, AppConfigField::PositionXOffset, true);
-        page.setting(&self.config, AppConfigField::PositionYOffset, true);
+        page.setting(
+            &self.config,
+            AppConfigField::PositionYOffset,
+            !self.config.notch_mode,
+        );
         page.setting(&self.config, AppConfigField::FontSize, true);
 
         let monitors = Self::get_monitor_list();

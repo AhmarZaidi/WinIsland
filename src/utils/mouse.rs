@@ -46,6 +46,41 @@ pub fn is_point_in_continuous_rounded_rect(
     .contains(Point::new(px as f32, py as f32))
 }
 
+pub fn is_point_in_notch(
+    point: (f64, f64),
+    rect: (f64, f64, f64, f64),
+    bottom_radius: f64,
+    ear_radius: f64,
+) -> bool {
+    let (px, py) = point;
+    let (rx, ry, rw, rh) = rect;
+    if !px.is_finite()
+        || !py.is_finite()
+        || !rx.is_finite()
+        || !ry.is_finite()
+        || !rw.is_finite()
+        || !rh.is_finite()
+        || !bottom_radius.is_finite()
+        || !ear_radius.is_finite()
+        || rw <= 0.0
+        || rh <= 0.0
+    {
+        return false;
+    }
+
+    let ear = ear_radius.max(0.0);
+    if px < rx - ear || px > rx + rw + ear || py < ry || py > ry + rh {
+        return false;
+    }
+
+    Path::notch(
+        Rect::from_xywh(rx as f32, ry as f32, rw as f32, rh as f32),
+        bottom_radius as f32,
+        ear as f32,
+    )
+    .contains(Point::new(px as f32, py as f32))
+}
+
 pub fn is_left_button_pressed() -> bool {
     crate::platform::input()
         .key_down(VirtualKey::LeftMouseButton)

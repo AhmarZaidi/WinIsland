@@ -615,6 +615,7 @@ impl App {
                     let old_system_controls_overlay = self.config.system_controls_overlay;
                     let old_position_x_offset = self.config.position_x_offset;
                     let old_position_y_offset = self.config.position_y_offset;
+                    let old_notch_mode = self.config.notch_mode;
                     let old_monitor_index = self.config.monitor_index;
                     let page_order_changed = self.config.expanded_page_order
                         != current_config.expanded_page_order
@@ -683,7 +684,8 @@ impl App {
                         || (old_max_h - self.config.expanded_height).abs() > 0.1;
                     let position_changed = old_position_x_offset != self.config.position_x_offset
                         || old_position_y_offset != self.config.position_y_offset
-                        || old_monitor_index != self.config.monitor_index;
+                        || old_monitor_index != self.config.monitor_index
+                        || old_notch_mode != self.config.notch_mode;
 
                     if surface_size_changed {
                         self.geom.os_w = window_size.width;

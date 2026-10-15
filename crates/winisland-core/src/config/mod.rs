@@ -27,6 +27,8 @@ pub const WINDOW_TITLE: &str = "WinIsland";
 #[educe(Default)]
 #[serde(default)]
 pub struct AppConfig {
+    #[setting(toggle)]
+    pub notch_mode: bool,
     #[serde(alias = "global_scale")]
     #[educe(Default = 1.0)]
     #[setting(number(min = 0.5, max = 5.0, step = 0.05, precision = 2))]

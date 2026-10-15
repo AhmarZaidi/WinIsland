@@ -91,6 +91,7 @@ section_updates=UPDATES
 section_playback=PLAYBACK
 section_track_text=TRACK TEXT
 section_lyrics=LYRICS
+notch_mode=Notch Mode
 compact_scale=Compact Size
 expanded_scale=Expanded Size
 base_width=Base Width

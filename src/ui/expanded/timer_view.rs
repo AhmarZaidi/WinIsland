@@ -299,7 +299,7 @@ pub fn clear_selection() {
 }
 
 pub fn duration_label(seconds: u64) -> String {
-    if seconds % 60 == 0 {
+    if seconds.is_multiple_of(60) {
         tr_args("timer_minutes", &[&(seconds / 60).to_string()])
     } else {
         format_remaining(Duration::from_secs(seconds))

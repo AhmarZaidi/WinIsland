@@ -6,6 +6,7 @@ use winisland_core::config::{
 };
 use winisland_platform::{OverlayStyles, WindowPosition, WindowSize};
 use winisland_render::text::FontManager;
+use winisland_render::{Path, Rect};
 
 use super::{App, DEFAULT_ANIMATION_REFRESH_RATE_MILLIHERTZ, IslandLayout};
 
@@ -114,7 +115,9 @@ impl App {
         } else {
             (collapsed_center_x, window_size.width as f64 / 2.0)
         };
-        let (anchor_y, local_anchor_y) = if dock_position.is_bottom() {
+        let (anchor_y, local_anchor_y) = if self.config.notch_mode {
+            (mon_pos.y as f64, 0.0)
+        } else if dock_position.is_bottom() {
             (
                 collapsed_center_y + base_half_h,
                 window_size.height as f64 - TOP_OFFSET as f64,
@@ -131,12 +134,19 @@ impl App {
 
     fn collapsed_island_center(&self, mon_pos: WindowPosition, mon_size: WindowSize) -> (f64, f64) {
         let scale = self.config.compact_scale as f64;
+        let top_offset = if self.config.notch_mode {
+            0.0
+        } else {
+            TOP_OFFSET as f64
+        };
+        let y_offset = if self.config.notch_mode {
+            0.0
+        } else {
+            self.config.position_y_offset as f64
+        };
         (
             mon_pos.x as f64 + mon_size.width as f64 / 2.0 + self.config.position_x_offset as f64,
-            mon_pos.y as f64
-                + TOP_OFFSET as f64
-                + self.config.base_height as f64 * scale / 2.0
-                + self.config.position_y_offset as f64,
+            mon_pos.y as f64 + top_offset + self.config.base_height as f64 * scale / 2.0 + y_offset,
         )
     }
 
@@ -244,8 +254,13 @@ impl App {
         }
         if let Some((win_x, win_y)) = self.hide.origin.take() {
             self.geom.win_x = win_x;
-            self.geom.win_y = win_y;
-            window.set_outer_position(WindowPosition::new(win_x, win_y));
+            self.geom.win_y = if self.config.notch_mode {
+                self.island_monitor(window)
+                    .map_or(win_y, |m| m.position().y)
+            } else {
+                win_y
+            };
+            window.set_outer_position(WindowPosition::new(self.geom.win_x, self.geom.win_y));
         }
     }
 
@@ -293,11 +308,20 @@ impl App {
         } else {
             DockPosition::TopCenter
         };
-        let dock_bottom = dock_position.is_bottom();
+        let dock_bottom = if self.config.notch_mode {
+            false
+        } else {
+            dock_position.is_bottom()
+        };
+        let top_offset = if self.config.notch_mode {
+            0.0
+        } else {
+            TOP_OFFSET as f64
+        };
         let island_y = if dock_bottom && self.hide.origin.is_none() {
             self.geom.os_h as f64 - TOP_OFFSET as f64 - self.springs.h.value as f64
         } else {
-            TOP_OFFSET as f64
+            top_offset
         };
 
         let offset_x = if dock_position.is_left() {
@@ -312,7 +336,7 @@ impl App {
         let hidden_visible_height = self.hidden_visible_height();
         let concealed_height = (edge_size - hidden_visible_height).max(0.0);
         let hide_distance = if concealed_height > f64::EPSILON {
-            concealed_height + TOP_OFFSET as f64
+            concealed_height + top_offset
         } else {
             0.0
         };
@@ -323,7 +347,11 @@ impl App {
         };
         let hide_offset = self.springs.hide.value as f64 * hide_distance;
         let current_island_x = offset_x;
-        let current_island_y = island_y - hide_offset;
+        let current_island_y = if self.config.notch_mode {
+            (island_y - hide_offset).min(0.0)
+        } else {
+            island_y - hide_offset
+        };
         let compact_content_h = self
             .compact_content_height()
             .min(self.springs.h.value)
@@ -331,9 +359,13 @@ impl App {
         let stable_base_y = if dock_bottom && self.hide.origin.is_none() {
             self.geom.os_h as f64 - TOP_OFFSET as f64 - compact_content_h
         } else {
-            TOP_OFFSET as f64
+            top_offset
         };
-        let stable_island_y = stable_base_y - hide_offset;
+        let stable_island_y = if self.config.notch_mode {
+            (stable_base_y - hide_offset).min(0.0)
+        } else {
+            stable_base_y - hide_offset
+        };
         let hidden_reveal_x = current_island_x;
         let hidden_reveal_y = current_island_y + self.springs.h.value as f64 - 1.0;
         let hidden_reveal_w = self.springs.w.value as f64;
@@ -516,6 +548,33 @@ impl App {
             self.config.expanded_width * self.config.expanded_scale
         } else {
             target_base_w * self.config.compact_scale
+        }
+    }
+
+    pub(super) fn island_path(&self, island: Rect, radius: f32) -> Path {
+        if self.config.notch_mode {
+            let ear_r = (8.0 * self.config.compact_scale).min(radius).max(2.0);
+            Path::notch(island, radius, ear_r)
+        } else {
+            Path::continuous_rounded_rect(island, radius)
+        }
+    }
+
+    pub(super) fn is_point_in_island(
+        &self,
+        point: (f64, f64),
+        rect: (f64, f64, f64, f64),
+        radius: f64,
+    ) -> bool {
+        if self.config.notch_mode {
+            let ear_r = (8.0 * self.config.compact_scale)
+                .min(radius as f32)
+                .max(2.0) as f64;
+            crate::utils::mouse::is_point_in_notch(point, rect, radius, ear_r)
+        } else {
+            let (px, py) = point;
+            let (rx, ry, rw, rh) = rect;
+            crate::utils::mouse::is_point_in_continuous_rounded_rect(px, py, rx, ry, rw, rh, radius)
         }
     }
 }

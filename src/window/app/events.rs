@@ -376,22 +376,28 @@ impl App {
                             compact_target_h,
                             island_layout.secondary_left,
                             secondary_task,
+                            self.config.notch_mode,
                         );
                         let surface_bounds = surface.outline.bounds();
-                        let outline = secondary_task
-                            .filter(|_| {
-                                self.host_backdrop
+                        let outline = (self.config.notch_mode || secondary_task.is_some())
+                            .then(|| {
+                                if self.host_backdrop
                                     && matches!(
                                         self.config.island_style.as_str(),
                                         "glass" | "dynamic"
                                     )
+                                {
+                                    Some(surface.outline.clip_segments(
+                                        winisland_render::Point::new(
+                                            surface_bounds.left,
+                                            surface_bounds.top,
+                                        ),
+                                    ))
+                                } else {
+                                    None
+                                }
                             })
-                            .map(|_| {
-                                surface.outline.clip_segments(winisland_render::Point::new(
-                                    surface_bounds.left,
-                                    surface_bounds.top,
-                                ))
-                            });
+                            .flatten();
                         let liquid_scale = self.config.compact_scale
                             + (self.config.expanded_scale - self.config.compact_scale)
                                 * progress.clamp(0.0, 1.0);
@@ -562,6 +568,7 @@ impl App {
                                         attention_alpha,
                                         surface: &surface,
                                         secondary_task,
+                                        notch_mode: self.config.notch_mode,
                                     },
                                 )
                             });

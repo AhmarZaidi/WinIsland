@@ -142,6 +142,7 @@ pub struct DrawIslandParams<'a> {
     pub attention_alpha: f32,
     pub surface: &'a multitask::IslandSurface,
     pub secondary_task: Option<TaskFrame<multitask::activities::Activity>>,
+    pub notch_mode: bool,
 }
 
 pub fn expanded_content_alpha(
@@ -197,15 +198,29 @@ pub fn draw_island(painter: Painter<'_>, params: DrawIslandParams<'_>) -> bool {
     if params.attention_alpha > 0.0 {
         let layout = &params.layout;
         let inset = -2.0 * layout.compact_scale;
-        let outline = Path::continuous_rounded_rect(
-            Rect::from_xywh(
-                layout.island_x + inset,
-                layout.island_y + inset,
-                layout.current_w - 2.0 * inset,
-                layout.current_h - 2.0 * inset,
-            ),
-            layout.current_r - inset,
-        );
+        let outline = if params.notch_mode {
+            let ear_r = (8.0 * layout.compact_scale).min(layout.current_r).max(2.0);
+            Path::notch(
+                Rect::from_xywh(
+                    layout.island_x + inset,
+                    layout.island_y,
+                    layout.current_w - 2.0 * inset,
+                    layout.current_h - inset,
+                ),
+                layout.current_r - inset,
+                ear_r,
+            )
+        } else {
+            Path::continuous_rounded_rect(
+                Rect::from_xywh(
+                    layout.island_x + inset,
+                    layout.island_y + inset,
+                    layout.current_w - 2.0 * inset,
+                    layout.current_h - 2.0 * inset,
+                ),
+                layout.current_r - inset,
+            )
+        };
         painter.stroke_path(
             &outline,
             2.5 * layout.compact_scale,
@@ -233,12 +248,20 @@ fn draw_expanded_shadow(painter: Painter<'_>, params: &DrawIslandParams<'_>, isl
     let offset_y = 2.0 * scale;
     let bounds = island_path.bounds();
     let (surface_width, surface_height) = painter.surface_size();
-    let margin = bounds
-        .left
-        .min(surface_width as f32 - bounds.right)
-        .min(bounds.top + offset_y)
-        .min(surface_height as f32 - bounds.bottom - offset_y)
-        .max(0.0);
+    let margin = if params.notch_mode {
+        bounds
+            .left
+            .min(surface_width as f32 - bounds.right)
+            .min(surface_height as f32 - bounds.bottom - offset_y)
+            .max(0.0)
+    } else {
+        bounds
+            .left
+            .min(surface_width as f32 - bounds.right)
+            .min(bounds.top + offset_y)
+            .min(surface_height as f32 - bounds.bottom - offset_y)
+            .max(0.0)
+    };
     let sigma = (3.0 * scale).min(margin / 3.0);
     let alpha = (28.0 * opacity) as u8;
     if layout.shadow_static && sigma > 0.0 {
@@ -490,6 +513,14 @@ fn draw_island_border(painter: Painter<'_>, params: &DrawIslandParams<'_>) {
     };
     painter.save();
     painter.clip_path(&params.surface.outline);
+    if params.notch_mode {
+        painter.clip_rect(Rect::from_ltrb(
+            layout.island_x - 1000.0,
+            layout.island_y + 1.0,
+            layout.island_x + layout.current_w + 1000.0,
+            layout.island_y + layout.current_h + 1000.0,
+        ));
+    }
     painter.stroke_path(
         &params.surface.outline,
         BORDER_WIDTH * 2.0,

@@ -58,13 +58,14 @@ impl App {
                 let rel_x = px - self.geom.win_x;
                 let rel_y = py - self.geom.win_y;
                 let layout = self.compute_island_layout();
-                let is_hovering = is_point_in_continuous_rounded_rect(
-                    rel_x as f64,
-                    rel_y as f64,
-                    layout.current_island_x,
-                    layout.current_island_y,
-                    self.springs.w.value as f64,
-                    self.springs.h.value as f64,
+                let is_hovering = self.is_point_in_island(
+                    (rel_x as f64, rel_y as f64),
+                    (
+                        layout.current_island_x,
+                        layout.current_island_y,
+                        self.springs.w.value as f64,
+                        self.springs.h.value as f64,
+                    ),
                     self.springs.r.value as f64,
                 );
                 if is_hovering {
@@ -97,13 +98,14 @@ impl App {
         let offset_x = layout.offset_x;
         let current_island_x = layout.current_island_x;
         let current_island_y = layout.current_island_y;
-        let is_hovering_visible = is_point_in_continuous_rounded_rect(
-            rel_x as f64,
-            rel_y as f64,
-            current_island_x,
-            current_island_y,
-            self.springs.w.value as f64,
-            self.springs.h.value as f64,
+        let is_hovering_visible = self.is_point_in_island(
+            (rel_x as f64, rel_y as f64),
+            (
+                current_island_x,
+                current_island_y,
+                self.springs.w.value as f64,
+                self.springs.h.value as f64,
+            ),
             self.springs.r.value as f64,
         ) || self.pager_contains(rel_x, rel_y, layout);
         let is_on_hidden_reveal = self.is_hidden()
@@ -562,6 +564,10 @@ impl App {
         crate::ui::expanded::timer_view::clear_selection();
         if self.hide.has_hidden_reason() {
             self.reveal_island();
+        }
+        if self.config.notch_mode {
+            self.springs.hide.value = 0.0;
+            self.springs.hide.velocity = 0.0;
         }
         let compact_height = self.compact_content_height();
         let interrupts_collapse = self.springs.h.value - compact_height

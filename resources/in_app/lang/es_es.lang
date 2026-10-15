@@ -91,6 +91,7 @@ section_updates=ACTUALIZACIONES
 section_playback=REPRODUCCIÓN
 section_track_text=TEXTO DE LA PISTA
 section_lyrics=LETRAS
+notch_mode=Modo Notch
 compact_scale=Tamaño Compacto
 expanded_scale=Tamaño Expandido
 base_width=Ancho Base

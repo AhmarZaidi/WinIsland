@@ -18,8 +18,14 @@ pub(crate) fn surface(
     compact_height: f32,
     left: bool,
     frame: Option<TaskFrame<Activity>>,
+    notch: bool,
 ) -> IslandSurface {
-    let primary = Path::continuous_rounded_rect(island, radius);
+    let primary = if notch {
+        let ear_r = (8.0 * scale).min(radius).max(2.0);
+        Path::notch(island, radius, ear_r)
+    } else {
+        Path::continuous_rounded_rect(island, radius)
+    };
     let Some(frame) = frame else {
         return IslandSurface {
             outline: primary.clone(),
@@ -59,7 +65,7 @@ pub(crate) fn surface(
         local_ball
     };
     let gap = local_ball.left - island.right;
-    let outline = if gap >= BRIDGE_DISTANCE * scale {
+    let outline = if notch || gap >= BRIDGE_DISTANCE * scale {
         let mut path = PathBuilder::new();
         path.add_path(&primary);
         path.add_path(&Path::rounded_rect(ball, height / 2.0));

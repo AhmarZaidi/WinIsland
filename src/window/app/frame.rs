@@ -8,7 +8,7 @@ use crate::ui::expanded::music_view::{
 use crate::ui::expanded::pager::ExpandedPage;
 use crate::utils::mouse::{
     double_click_interval, get_global_cursor_pos, is_cursor_hidden, is_foreground_fullscreen,
-    is_left_button_pressed, is_point_in_continuous_rounded_rect, is_point_in_rect,
+    is_left_button_pressed, is_point_in_rect,
 };
 use winisland_core::config::MIN_HIDDEN_WIDTH;
 
@@ -139,13 +139,14 @@ impl App {
         let offset_x = layout.offset_x;
         let current_island_x = layout.current_island_x;
         let current_island_y = layout.current_island_y;
-        let is_hovering_island = is_point_in_continuous_rounded_rect(
-            rel_x as f64,
-            rel_y as f64,
-            current_island_x,
-            current_island_y,
-            self.springs.w.value as f64,
-            self.springs.h.value as f64,
+        let is_hovering_island = self.is_point_in_island(
+            (rel_x as f64, rel_y as f64),
+            (
+                current_island_x,
+                current_island_y,
+                self.springs.w.value as f64,
+                self.springs.h.value as f64,
+            ),
             self.springs.r.value as f64,
         ) || self.pager_contains(rel_x, rel_y, &layout);
         let is_over_hidden_reveal = self.is_hidden()
@@ -233,7 +234,7 @@ impl App {
 
     fn update_hit_regions(&self, window: &WindowRef, plugin_captured: bool) {
         use winisland_platform::{HitRegion, Rect};
-        use winisland_render::{Path, Point};
+        use winisland_render::Point;
 
         if self.fullscreen_hide_active() && !self.hide.overlay_reveal {
             window.set_hit_regions(&[]);
@@ -257,7 +258,7 @@ impl App {
             self.springs.w.value,
             self.springs.h.value,
         );
-        let path = Path::continuous_rounded_rect(island, self.springs.r.value);
+        let path = self.island_path(island, self.springs.r.value);
         let mut regions = vec![HitRegion::Path(path.clip_segments(Point::new(0.0, 0.0)))];
         let rect_region = |rect: winisland_render::Rect| {
             HitRegion::Rect(Rect {
@@ -426,7 +427,9 @@ impl App {
             return;
         }
         self.config.position_x_offset = start_ox + dx;
-        self.config.position_y_offset = start_oy + dy;
+        if !self.config.notch_mode {
+            self.config.position_y_offset = start_oy + dy;
+        }
         if let Some(monitor) = Self::get_target_monitor(window, self.config.monitor_index) {
             let mon_size = monitor.size();
             let mon_pos = monitor.position();
@@ -675,7 +678,7 @@ impl App {
         {
             self.hide.notification_reveal = true;
             self.idle_timer = Instant::now();
-            self.springs.hide.velocity = -0.65;
+            self.springs.hide.velocity = if self.config.notch_mode { 0.0 } else { -0.65 };
             self.compact_overlay.update(
                 CompactOverlayState::Present,
                 CompactOverlayState::Present,
@@ -697,7 +700,7 @@ impl App {
             }
             self.idle_timer = Instant::now();
             if reveal_started {
-                self.springs.hide.velocity = -0.65;
+                self.springs.hide.velocity = if self.config.notch_mode { 0.0 } else { -0.65 };
             }
             self.compact_overlay.update(
                 CompactOverlayState::Present,
@@ -731,7 +734,7 @@ impl App {
             self.hide.auto = false;
             self.idle_timer = Instant::now();
             if was_auto_hidden && !self.is_hidden() {
-                self.springs.hide.velocity = -0.65;
+                self.springs.hide.velocity = if self.config.notch_mode { 0.0 } else { -0.65 };
             }
         } else if self.activity_mgr.keeps_visible()
             && !self.components_hidden
@@ -741,7 +744,7 @@ impl App {
             self.hide.auto = false;
             self.idle_timer = Instant::now();
             if !self.is_hidden() {
-                self.springs.hide.velocity = -0.65;
+                self.springs.hide.velocity = if self.config.notch_mode { 0.0 } else { -0.65 };
             }
             log::info!("Island un-hidden (active activity)");
         } else if !self.is_hidden() && is_idle {
@@ -847,12 +850,18 @@ impl App {
             let hide_target = if self.is_hidden() { 1.0 } else { 0.0 };
             let (stiffness, damping) = if self.is_hidden() {
                 (0.12, 0.70)
+            } else if self.config.notch_mode {
+                (0.12, 0.82)
             } else {
                 (0.08, 0.78)
             };
             self.springs
                 .hide
                 .update_dt(hide_target, stiffness, damping, dt);
+            if self.config.notch_mode && !self.is_hidden() && self.springs.hide.value <= 0.0 {
+                self.springs.hide.value = 0.0;
+                self.springs.hide.velocity = 0.0;
+            }
             let hide_span = self.compute_island_layout().hide_distance.max(50.0) as f32;
             self.springs.hide.settle(
                 hide_target,
@@ -865,6 +874,7 @@ impl App {
         }
         if self.springs.hide.velocity.abs() > 0.001
             || (self.springs.hide.value > 0.0 && self.springs.hide.value < 1.0)
+            || (self.is_hidden() && self.springs.hide.value < 1.0)
         {
             window.request_redraw();
         }
